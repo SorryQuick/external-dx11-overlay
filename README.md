@@ -9,7 +9,7 @@ There are four steps to make this work.
 - Compile a forked version of BlishHUD from https://github.com/SorryQuick/Blish-HUD
 - If you are on Linux/Mac, you need to somehow get BlishHUD launched into your wine prefix. A quick way to do this (which probably won't work with steam) is to run something like this:
   ```WINEFSYNC=1 WINEPREFIX=<prefix> <wine binary> "Blish HUD.exe"```. With the same prefix and wine binary you used to launch the game (eg proton's wine binary).
-- You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Eventually, this could support existing loaders like arcdps. I will also soon post to github the custom launcher I use, which loads any dll and exe, work with steam and everything else and is quite plug and play.
+- You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Eventually, this could support existing loaders like arcdps. I've been using https://github.com/SorryQuick/Gw2-Simple-Addon-Loader
 
 # Current status
 Obviously this is very early in development. As I write this, there are still a few issues. Some of those being:

@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Instant};
 
 use windows::{
     Win32::{
@@ -90,7 +90,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
                         height = new_height;
                     }
 
-                    //TODO: BIG TODO - SKIP MAPPING IF THE FRAME HASN'T CHANGED.
+                    //TODO: SKIP MAPPING IF THE FRAME HASN'T CHANGED.
                     let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
                     if let Err(e) = ctx.Map(
                         &state.overlay_texture,

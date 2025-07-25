@@ -1,13 +1,26 @@
 use std::{
-    ffi::OsStr, os::windows::ffi::OsStrExt, ptr::read_unaligned, slice::from_raw_parts, sync::Mutex,
+    ffi::OsStr,
+    os::windows::ffi::OsStrExt,
+    ptr::read_unaligned,
+    slice::from_raw_parts,
+    sync::{
+        Mutex, OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Instant,
 };
 
 use windows::{
     Win32::{
-        Foundation::{BOOL, HANDLE},
-        System::Memory::{
-            FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
-            UnmapViewOfFile,
+        Foundation::{BOOL, HANDLE, WAIT_OBJECT_0},
+        System::{
+            Memory::{
+                FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
+                UnmapViewOfFile,
+            },
+            Threading::{
+                self, CreateEventW, OpenEventW, ResetEvent, SetEvent, WaitForSingleObject,
+            },
         },
     },
     core::PCWSTR,
@@ -30,18 +43,21 @@ pub fn start_frame_watcher_thread() {
 
     std::thread::spawn(move || {
         let mut header: Option<MEMORY_MAPPED_VIEW_ADDRESS> = None;
+        let (frame_ready, frame_consumed) = init_events();
         loop {
             if header.is_none() {
                 header = open_header_mmf().ok();
             }
             if let Some(header_ptr) = header {
-                if let Some(data) = try_read_shared_memory(header_ptr) {
+                if let Some(data) =
+                    try_read_shared_memory(header_ptr, &frame_ready, &frame_consumed)
+                {
                     if let Some(buf) = FRAME_BUFFER.get() {
                         let mut buf = buf.lock().unwrap();
                         *buf = Some(data)
                     }
                 }
-                wait_for_frame_ready(header_ptr.Value as *mut u8);
+                wait_for_frame_ready(header_ptr.Value as *mut u8, &frame_ready);
             } else {
                 //If Blish is not running, don't bother running this thread too often.
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -50,25 +66,29 @@ pub fn start_frame_watcher_thread() {
     });
 }
 
+fn init_events() -> (HANDLE, HANDLE) {
+    let frame_ready_name: Vec<u16> = "BlishHUD_FrameReady\0".encode_utf16().collect();
+    let frame_consumed_name: Vec<u16> = "BlishHUD_FrameConsumed\0".encode_utf16().collect();
+    let frame_ready = unsafe {
+        CreateEventW(None, true, false, PCWSTR(frame_ready_name.as_ptr()))
+            .expect("Could not open frame ready event.")
+    };
+    let frame_consumed = unsafe {
+        CreateEventW(None, true, true, PCWSTR(frame_consumed_name.as_ptr()))
+            .expect("Could not open frame consumed event.")
+    };
+
+    if frame_ready.0 == 0 || frame_consumed.0 == 0 {
+        panic!("Could not initialize events.");
+    }
+    (frame_ready, frame_consumed)
+}
+
 ///Waits for a frame to be ready
-//TODO: Use events for better performance, CreateEvent...
-fn wait_for_frame_ready(header_ptr: *mut u8) {
-    let mut attempts = 0;
-    loop {
-        let ready = unsafe { read_unaligned(header_ptr.add(8) as *const u32).to_le() };
-
-        if ready == 1 {
-            break;
-        }
-
-        // Spin a bit, then yield/sleep
-        if attempts < 50 {
-            std::hint::spin_loop();
-        } else if attempts < 200 {
-            std::thread::yield_now();
-        }
-
-        attempts += 1;
+fn wait_for_frame_ready(header_ptr: *mut u8, frame_ready: &HANDLE) {
+    let result = unsafe { WaitForSingleObject(*frame_ready, Threading::INFINITE) };
+    if result != WAIT_OBJECT_0 {
+        panic!("WaitForSingleObject failed.");
     }
 }
 
@@ -144,9 +164,14 @@ fn get_body_handle() -> Result<HANDLE, ()> {
 }
 
 ///This is the big function that receives the frame from Blish.
-fn try_read_shared_memory(header: MEMORY_MAPPED_VIEW_ADDRESS) -> Option<SharedFrame> {
+fn try_read_shared_memory(
+    header: MEMORY_MAPPED_VIEW_ADDRESS,
+    frame_ready: &HANDLE,
+    frame_consumed: &HANDLE,
+) -> Option<SharedFrame> {
     unsafe {
         let header_ptr = header.Value as *mut u8;
+        //TODO: REMOVE old events from header
 
         //Header data, look at C# doc for format.
         let header = from_raw_parts(header_ptr as *const u8, HEADER_SIZE);
@@ -256,9 +281,8 @@ fn try_read_shared_memory(header: MEMORY_MAPPED_VIEW_ADDRESS) -> Option<SharedFr
 
         UnmapViewOfFile(full_ptr).ok();
 
-        //Update frame_consumed = 1 and frame_ready = 0
-        std::ptr::write_unaligned(header_ptr.add(12) as *mut i32, 1);
-        std::ptr::write_unaligned(header_ptr.add(8) as *mut i32, 0);
+        SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");
+        ResetEvent(*frame_ready).expect("Could not reset the frame_ready event.");
 
         Some(SharedFrame {
             width,

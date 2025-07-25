@@ -23,7 +23,7 @@ static SHARED_HANDLE_BODY: OnceLock<Mutex<HANDLE>> = OnceLock::new();
 static HEADER_NAME: &str = "BlishHUD_Header";
 static BODY_NAME: &str = "BlishHUD_Body";
 
-const HEADER_SIZE: usize = 16;
+const HEADER_SIZE: usize = 8;
 
 ///Simple utility to verify if a given coordinate is over the overlay. Used for mouse input mostly.
 ///Pretty fast, but only if the FRAME_BUFFER is not locked. Only really checks if alpha > 0

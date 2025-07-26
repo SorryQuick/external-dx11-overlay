@@ -39,7 +39,13 @@ pub struct SharedFrame {
 
 ///This thread listens for messages from Blish. It updates the FRAME_BUFFER accordingly.
 pub fn start_frame_watcher_thread() {
-    FRAME_BUFFER.set(Mutex::new(None)).unwrap();
+    FRAME_BUFFER
+        .set(Mutex::new(SharedFrame {
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+        }))
+        .unwrap();
 
     std::thread::spawn(move || {
         let mut header: Option<MEMORY_MAPPED_VIEW_ADDRESS> = None;
@@ -49,14 +55,7 @@ pub fn start_frame_watcher_thread() {
                 header = open_header_mmf().ok();
             }
             if let Some(header_ptr) = header {
-                if let Some(data) =
-                    try_read_shared_memory(header_ptr, &frame_ready, &frame_consumed)
-                {
-                    if let Some(buf) = FRAME_BUFFER.get() {
-                        let mut buf = buf.lock().unwrap();
-                        *buf = Some(data)
-                    }
-                }
+                try_read_shared_memory(header_ptr, &frame_ready, &frame_consumed);
                 wait_for_frame_ready(header_ptr.Value as *mut u8, &frame_ready);
             } else {
                 //If Blish is not running, don't bother running this thread too often.
@@ -168,15 +167,12 @@ fn try_read_shared_memory(
     header: MEMORY_MAPPED_VIEW_ADDRESS,
     frame_ready: &HANDLE,
     frame_consumed: &HANDLE,
-) -> Option<SharedFrame> {
+) {
     unsafe {
         let header_ptr = header.Value as *mut u8;
-        //TODO: REMOVE old events from header
 
-        //Header data, look at C# doc for format.
+        //Header data
         let header = from_raw_parts(header_ptr as *const u8, HEADER_SIZE);
-
-        //println!("Got a frame! {} Data: {:02X?}", header.len(), header);
 
         //Dimensions of the frame
         let width = u32::from_le_bytes(header[0..4].try_into().unwrap());
@@ -184,110 +180,32 @@ fn try_read_shared_memory(
 
         if width == 0 || height == 0 || width > 10000 || height > 10000 {
             println!("Width/Height issue: {}x{}", width, height);
-            return None;
+            return;
         }
 
         //Read the actual frame
-        let max_frame_size = 3840 * 2160 * 4; //TODO: Dynamic size
-        let max_buffer_size = 4 + max_frame_size; //Include 4 bytes for dirty_count
-        let total_size = max_buffer_size;
-
-        let full_ptr = open_body_mmf(total_size).ok()?;
+        let total_size = (width * height * 4) as usize;
+        let full_ptr = open_body_mmf(total_size).unwrap();
         let buffer_ptr = full_ptr.Value as *const u8;
 
-        // Parse dirty rect count
-        let dirty_count =
-            u32::from_le_bytes(from_raw_parts(buffer_ptr, 4).try_into().unwrap()) as usize;
+        //Copy frame
+        let mtx = FRAME_BUFFER.get().unwrap();
+        let mut frame = mtx.lock().unwrap();
 
-        //Clone here because we don't want to hold the lock for too long.
-        //Pretty important since we need this lock everytime the mouse moves and a frame is drawn.
-        let mut full_pixels = if let Some(mtx) = FRAME_BUFFER.get() {
-            let guard = mtx.lock().unwrap();
-            if let Some(ref frame) = *guard {
-                if frame.width == width && frame.height == height {
-                    frame.pixels.clone()
-                } else {
-                    vec![0u8; (width * height * 4) as usize]
-                }
-            } else {
-                vec![0u8; (width * height * 4) as usize]
-            }
-        } else {
-            vec![0u8; (width * height * 4) as usize]
-        };
+        if frame.width != width || frame.height != height {
+            frame.width = width;
+            frame.height = height;
 
-        //Loop over the dirty rectangles
-        let mut offset = 4;
-        for _ in 0..dirty_count {
-            if offset > max_buffer_size {
-                println!("Offset calculation issue in shared memory");
-                UnmapViewOfFile(full_ptr).ok();
-                return None;
-            }
-            let rect_x = u32::from_le_bytes(
-                from_raw_parts(buffer_ptr.add(offset), 4)
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            offset += 4;
-            let rect_y = u32::from_le_bytes(
-                from_raw_parts(buffer_ptr.add(offset), 4)
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            offset += 4;
-            let rect_w = u32::from_le_bytes(
-                from_raw_parts(buffer_ptr.add(offset), 4)
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            offset += 4;
-            let rect_h = u32::from_le_bytes(
-                from_raw_parts(buffer_ptr.add(offset), 4)
-                    .try_into()
-                    .unwrap(),
-            ) as usize;
-            offset += 4;
-            /*if dirty_count == 1 {
-                println!(
-                    "rect_x: {}, rect_y: {}, w: {}, h: {}",
-                    rect_x, rect_y, rect_w, rect_h
-                );
-            }*/
-            let pixels_len = rect_w * rect_h * 4;
-            if offset + pixels_len > max_buffer_size {
-                println!(
-                    "Offset calculation issue in shared memory (2) {} + {} > {}",
-                    offset, pixels_len, max_buffer_size
-                );
-                UnmapViewOfFile(full_ptr).ok();
-                return None;
-            }
-            if rect_x + rect_w > width as usize || rect_y + rect_h > height as usize {
-                //Frame inconsistency, drop it.
-                println!("Bad frame??? This should never trigger?");
-                UnmapViewOfFile(full_ptr).ok();
-                return None;
-            }
-            for row in 0..rect_h {
-                let src_start = offset + row * rect_w * 4;
-                let dst_start = ((rect_y + row) * width as usize + rect_x) * 4;
-
-                full_pixels[dst_start..dst_start + rect_w * 4]
-                    .copy_from_slice(from_raw_parts(buffer_ptr.add(src_start), rect_w * 4));
-            }
-            offset += pixels_len;
+            //malloc
+            frame.pixels = Vec::with_capacity(total_size);
+            frame.pixels.set_len(total_size);
         }
+
+        std::ptr::copy_nonoverlapping(buffer_ptr, frame.pixels.as_mut_ptr(), total_size);
 
         UnmapViewOfFile(full_ptr).ok();
 
         SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");
         ResetEvent(*frame_ready).expect("Could not reset the frame_ready event.");
-
-        Some(SharedFrame {
-            width,
-            height,
-            pixels: full_pixels,
-        })
     }
 }

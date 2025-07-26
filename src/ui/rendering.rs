@@ -63,8 +63,8 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
                     //Quick read to get the sizes.
                     if let Some(frame_lock) = FRAME_BUFFER.get() {
-                        let guard = frame_lock.lock().unwrap();
-                        if let Some(ref frame) = *guard {
+                        let frame = frame_lock.lock().unwrap();
+                        if frame.width > 0 && frame.height > 0 {
                             new_width = frame.width;
                             new_height = frame.height;
                         } else {
@@ -168,21 +168,14 @@ fn copy_frame_into_map(
     height: usize,
     mapped: &D3D11_MAPPED_SUBRESOURCE,
 ) -> Result<(), ()> {
-    if let Some(frame_lock) = FRAME_BUFFER.get() {
-        let guard = frame_lock.lock().unwrap();
-        if let Some(ref frame) = *guard {
-            for y in 0..height as usize {
-                unsafe {
-                    let src_row = frame.pixels.as_ptr().add(y * width as usize * 4);
-                    let dst_row = (mapped.pData as *mut u8).add(y * mapped.RowPitch as usize);
-                    std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4)
-                };
-            }
-        } else {
-            return Err(());
-        }
-    } else {
-        return Err(());
+    let frame_lock = FRAME_BUFFER.get().unwrap();
+    let frame = frame_lock.lock().unwrap();
+    for y in 0..height as usize {
+        unsafe {
+            let src_row = frame.pixels.as_ptr().add(y * width as usize * 4);
+            let dst_row = (mapped.pData as *mut u8).add(y * mapped.RowPitch as usize);
+            std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4)
+        };
     }
     Ok(())
 }

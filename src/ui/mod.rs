@@ -8,7 +8,7 @@ use windows::{
 };
 
 //Contains an entire frame. This frame will be the one rendered in the hooked present.
-static FRAME_BUFFER: OnceLock<Mutex<Option<SharedFrame>>> = OnceLock::new();
+static FRAME_BUFFER: OnceLock<Mutex<SharedFrame>> = OnceLock::new();
 
 pub static OVERLAY_STATE: OnceLock<Mutex<Option<OverlayState>>> = OnceLock::new();
 
@@ -28,18 +28,22 @@ const HEADER_SIZE: usize = 8;
 ///Simple utility to verify if a given coordinate is over the overlay. Used for mouse input mostly.
 ///Pretty fast, but only if the FRAME_BUFFER is not locked. Only really checks if alpha > 0
 pub fn is_overlay_pixel(x: u32, y: u32) -> bool {
-    if let Some(frame_buf) = FRAME_BUFFER.get() {
-        let guard = frame_buf.lock().unwrap();
-        if let Some(ref frame) = *guard {
-            if x >= frame.width || y >= frame.height {
-                return false;
-            }
-            return frame
-                .pixels
-                .get(((y * frame.width + x) * 4 + 3) as usize)
-                .map_or(false, |&alpha| alpha > 0);
-        }
+    let frame_buf = FRAME_BUFFER.get_or_init(|| {
+        Mutex::new(SharedFrame {
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+        })
+    });
+    let frame = frame_buf.lock().unwrap();
+    if x >= frame.width || y >= frame.height {
+        return false;
     }
+    return frame
+        .pixels
+        .get(((y * frame.width + x) * 4 + 3) as usize)
+        .map_or(false, |&alpha| alpha > 0);
+
     false
 }
 

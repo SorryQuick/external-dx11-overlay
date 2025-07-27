@@ -12,14 +12,11 @@ There are four steps to make this work.
 - You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Eventually, this could support existing loaders like arcdps. I've been using https://github.com/SorryQuick/Gw2-Simple-Addon-Loader
 
 # Current status
-Obviously this is very early in development. As I write this, there are still a few issues. Some of those being:
+A lot of the core issues have been solved and it should now work pretty well. Current known issues:
+If you encounter any problem, create an issue on github.
 
-- Sound is currently disabled. Even a vanilla BlishHUD crashes on my system without disabling its sound. Eventually, this should be fixed. The commented code is in the first commit.
-- There is currently a significant amount of lag. It shouldn't affect the game's performance at all, but the overlay itself is not very smooth. This is very fixeable however, and will be a pretty big priority soon.
+- Sound is currently disabled. Seemingly cause by Wine and out of my control, though could be worked around eventually. 
 - Shared Memory should be allocated dynamically. Currently it allocates way too much.
-- Sometimes Blish crashes when I open it. It's very random and only happened once or twice.
-- The Blish console gets flooded with "resource released while mapped". This sometimes happens because of wine (while windows silently ignores it). It could be worth seeing if this is relevant or not.
-- Probably a lot more bugs to discover.
 
 # Compiling
 ```cargo +nightly build --release```

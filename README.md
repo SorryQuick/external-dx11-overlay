@@ -3,6 +3,8 @@ Allows an external overlay to render inside a game as a DX11 render hook. Origin
 It can easily be changed to work for any game with any overlay.
 
 # How to use
+For simple steps without having to compile anything: see https://github.com/SorryQuick/external-dx11-overlay/blob/master/Simple-User-Guide.md
+
 There are four steps to make this work.
 
 - Compile this repo and get the dll.

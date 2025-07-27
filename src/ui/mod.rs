@@ -1,6 +1,6 @@
 use std::sync::{Mutex, OnceLock};
 
-use mmf::{SharedFrame, start_frame_watcher_thread};
+use mmf::{SHARED_FRAME_PTR, SharedFrame, get_blank_shared_frame, start_frame_watcher_thread};
 use rendering::{OverlayState, detoured_present};
 use windows::{
     Win32::{Foundation::HANDLE, Graphics::Dxgi::IDXGISwapChain},
@@ -26,25 +26,16 @@ static BODY_NAME: &str = "BlishHUD_Body";
 const HEADER_SIZE: usize = 8;
 
 ///Simple utility to verify if a given coordinate is over the overlay. Used for mouse input mostly.
-///Pretty fast, but only if the FRAME_BUFFER is not locked. Only really checks if alpha > 0
 pub fn is_overlay_pixel(x: u32, y: u32) -> bool {
-    let frame_buf = FRAME_BUFFER.get_or_init(|| {
-        Mutex::new(SharedFrame {
-            width: 0,
-            height: 0,
-            pixels: Vec::new(),
-        })
-    });
+    let frame_buf = FRAME_BUFFER.get_or_init(|| Mutex::new(get_blank_shared_frame()));
+    //Safe but slow way with a LOCK
     let frame = frame_buf.lock().unwrap();
     if x >= frame.width || y >= frame.height {
         return false;
     }
-    return frame
-        .pixels
-        .get(((y * frame.width + x) * 4 + 3) as usize)
-        .map_or(false, |&alpha| alpha > 0);
 
-    false
+    let index = ((y * frame.width + x) * 4 + 3) as usize;
+    return unsafe { *frame.pixels.get_unchecked(index) } > 0;
 }
 
 pub fn get_detoured_present() -> impl Fn(IDXGISwapChain, u32, u32) -> HRESULT {

@@ -6,7 +6,6 @@ use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
     Foundation::HINSTANCE,
     System::{
-        Console::{AllocConsole, FreeConsole},
         LibraryLoader::FreeLibraryAndExitThread,
         SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
     },
@@ -43,11 +42,6 @@ extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) 
 ///THE MAIN FUNCTION. It initializes everything needed.
 ///Ideally, all hooks are created here.
 fn attach(handle: HINSTANCE) {
-    #[cfg(debug_assertions)]
-    unsafe {
-        AllocConsole().unwrap()
-    };
-
     std::thread::spawn(move || {
         let (base, size) = get_base_addr_and_size();
         let mainwindow_hwnd = get_mainwindow_hwnd().expect("Could not get the game's window.");
@@ -93,8 +87,5 @@ fn attach(handle: HINSTANCE) {
 fn detatch() {
     unsafe {
         present_hook.disable().unwrap();
-
-        #[cfg(debug_assertions)]
-        FreeConsole().unwrap();
     }
 }

@@ -1,14 +1,4 @@
-use std::{
-    ffi::OsStr,
-    os::windows::ffi::OsStrExt,
-    ptr::read_unaligned,
-    slice::from_raw_parts,
-    sync::{
-        Mutex, OnceLock,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Instant,
-};
+use std::{ffi::OsStr, os::windows::ffi::OsStrExt, slice::from_raw_parts, sync::Mutex};
 
 use windows::{
     Win32::{
@@ -18,9 +8,7 @@ use windows::{
                 FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
                 UnmapViewOfFile,
             },
-            Threading::{
-                self, CreateEventW, OpenEventW, ResetEvent, SetEvent, WaitForSingleObject,
-            },
+            Threading::{self, CreateEventW, ResetEvent, SetEvent, WaitForSingleObject},
         },
     },
     core::PCWSTR,
@@ -37,14 +25,24 @@ pub struct SharedFrame {
     pub pixels: Vec<u8>, // RGBA values in pairs of 4 bytes.
 }
 
+//Used in the rare cases that you need to bypass the mutex for higher speed (such as input)
+//Should never be written to or modified without the lock.
+pub static mut SHARED_FRAME_PTR: *const SharedFrame = std::ptr::null();
+
+pub fn get_blank_shared_frame() -> SharedFrame {
+    let sf = SharedFrame {
+        width: 0,
+        height: 0,
+        pixels: Vec::new(),
+    };
+    unsafe { SHARED_FRAME_PTR = &sf as *const SharedFrame };
+    sf
+}
+
 ///This thread listens for messages from Blish. It updates the FRAME_BUFFER accordingly.
 pub fn start_frame_watcher_thread() {
     FRAME_BUFFER
-        .set(Mutex::new(SharedFrame {
-            width: 0,
-            height: 0,
-            pixels: Vec::new(),
-        }))
+        .set(Mutex::new(get_blank_shared_frame()))
         .unwrap();
 
     std::thread::spawn(move || {
@@ -56,7 +54,7 @@ pub fn start_frame_watcher_thread() {
             }
             if let Some(header_ptr) = header {
                 try_read_shared_memory(header_ptr, &frame_ready, &frame_consumed);
-                wait_for_frame_ready(header_ptr.Value as *mut u8, &frame_ready);
+                wait_for_frame_ready(&frame_ready);
             } else {
                 //If Blish is not running, don't bother running this thread too often.
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -84,7 +82,7 @@ fn init_events() -> (HANDLE, HANDLE) {
 }
 
 ///Waits for a frame to be ready
-fn wait_for_frame_ready(header_ptr: *mut u8, frame_ready: &HANDLE) {
+fn wait_for_frame_ready(frame_ready: &HANDLE) {
     let result = unsafe { WaitForSingleObject(*frame_ready, Threading::INFINITE) };
     if result != WAIT_OBJECT_0 {
         panic!("WaitForSingleObject failed.");

@@ -12,8 +12,9 @@ There are four steps to make this work.
 - You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Eventually, this could support existing loaders like arcdps. I've been using https://github.com/SorryQuick/Gw2-Simple-Addon-Loader
 
 # Current status
-A lot of the core issues have been solved and it should now work pretty well. Current known issues:
+A lot of the core issues have been solved and it should now work pretty well. 
 If you encounter any problem, create an issue on github.
+Current known issues:
 
 - Sound is currently disabled. Seemingly cause by Wine and out of my control, though could be worked around eventually. 
 - Shared Memory should be allocated dynamically. Currently it allocates way too much.

@@ -25,17 +25,12 @@ pub struct SharedFrame {
     pub pixels: Vec<u8>, // RGBA values in pairs of 4 bytes.
 }
 
-//Used in the rare cases that you need to bypass the mutex for higher speed (such as input)
-//Should never be written to or modified without the lock.
-pub static mut SHARED_FRAME_PTR: *const SharedFrame = std::ptr::null();
-
 pub fn get_blank_shared_frame() -> SharedFrame {
     let sf = SharedFrame {
         width: 0,
         height: 0,
         pixels: Vec::new(),
     };
-    unsafe { SHARED_FRAME_PTR = &sf as *const SharedFrame };
     sf
 }
 
@@ -47,13 +42,21 @@ pub fn start_frame_watcher_thread() {
 
     std::thread::spawn(move || {
         let mut header: Option<MEMORY_MAPPED_VIEW_ADDRESS> = None;
+        let mut body: Option<MEMORY_MAPPED_VIEW_ADDRESS> = None;
+        let mut body_handle: Option<HANDLE> = None;
         let (frame_ready, frame_consumed) = init_events();
         loop {
             if header.is_none() {
                 header = open_header_mmf().ok();
             }
             if let Some(header_ptr) = header {
-                try_read_shared_memory(header_ptr, &frame_ready, &frame_consumed);
+                try_read_shared_memory(
+                    header_ptr,
+                    &frame_ready,
+                    &frame_consumed,
+                    &mut body,
+                    &mut body_handle,
+                );
                 wait_for_frame_ready(&frame_ready);
             } else {
                 //If Blish is not running, don't bother running this thread too often.
@@ -100,9 +103,18 @@ fn open_header_mmf() -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
     }
 }
 
-fn open_body_mmf(size: usize) -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
-    let handle = get_body_handle()?;
-    let body_ptr = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, size) };
+fn open_body_mmf(
+    size: usize,
+    body_handle: &mut Option<HANDLE>,
+) -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
+    if body_handle.is_none() {
+        if let Ok(new_handle) = get_body_handle() {
+            *body_handle = Some(new_handle);
+        } else {
+            return Err(());
+        }
+    }
+    let body_ptr = unsafe { MapViewOfFile(body_handle.unwrap(), FILE_MAP_ALL_ACCESS, 0, 0, size) };
     if body_ptr.Value.is_null() {
         println!("Could not read shared body. Size: {}", size);
         Err(())
@@ -165,6 +177,8 @@ fn try_read_shared_memory(
     header: MEMORY_MAPPED_VIEW_ADDRESS,
     frame_ready: &HANDLE,
     frame_consumed: &HANDLE,
+    body: &mut Option<MEMORY_MAPPED_VIEW_ADDRESS>,
+    body_handle: &mut Option<HANDLE>,
 ) {
     unsafe {
         let header_ptr = header.Value as *mut u8;
@@ -183,13 +197,12 @@ fn try_read_shared_memory(
 
         //Read the actual frame
         let total_size = (width * height * 4) as usize;
-        let full_ptr = open_body_mmf(total_size).unwrap();
-        let buffer_ptr = full_ptr.Value as *const u8;
+        //let full_ptr = open_body_mmf(total_size).unwrap();
 
-        //Copy frame
         let mtx = FRAME_BUFFER.get().unwrap();
         let mut frame = mtx.lock().unwrap();
 
+        //Resize occured
         if frame.width != width || frame.height != height {
             frame.width = width;
             frame.height = height;
@@ -197,11 +210,27 @@ fn try_read_shared_memory(
             //malloc
             frame.pixels = Vec::with_capacity(total_size);
             frame.pixels.set_len(total_size);
+
+            //New Body
+            if let Some(old_body) = body {
+                if UnmapViewOfFile(*old_body).is_err() {
+                    return;
+                }
+            }
+
+            if let Ok(new_body) = open_body_mmf(total_size, body_handle) {
+                *body = Some(new_body);
+            } else {
+                return;
+            }
         }
 
-        std::ptr::copy_nonoverlapping(buffer_ptr, frame.pixels.as_mut_ptr(), total_size);
-
-        UnmapViewOfFile(full_ptr).ok();
+        //Copy frame
+        std::ptr::copy_nonoverlapping(
+            body.unwrap().Value as *const u8,
+            frame.pixels.as_mut_ptr(),
+            total_size,
+        );
 
         SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");
         ResetEvent(*frame_ready).expect("Could not reset the frame_ready event.");

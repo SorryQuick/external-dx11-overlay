@@ -1,6 +1,6 @@
 use std::sync::{Mutex, OnceLock};
 
-use mmf::{SHARED_FRAME_PTR, SharedFrame, get_blank_shared_frame, start_frame_watcher_thread};
+use mmf::{SharedFrame, get_blank_shared_frame, start_frame_watcher_thread};
 use rendering::{OverlayState, detoured_present};
 use windows::{
     Win32::{Foundation::HANDLE, Graphics::Dxgi::IDXGISwapChain},

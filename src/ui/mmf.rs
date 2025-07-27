@@ -1,21 +1,25 @@
-use std::{ffi::OsStr, os::windows::ffi::OsStrExt, slice::from_raw_parts, sync::Mutex};
+use std::{
+    ffi::OsStr, os::windows::ffi::OsStrExt, ptr::write_unaligned, slice::from_raw_parts,
+    sync::Mutex,
+};
 
 use windows::{
     Win32::{
-        Foundation::{BOOL, HANDLE, WAIT_OBJECT_0},
+        Foundation::{BOOL, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
                 UnmapViewOfFile,
             },
-            Threading::{self, CreateEventW, ResetEvent, SetEvent, WaitForSingleObject},
+            Threading::{CreateEventW, ResetEvent, SetEvent, WaitForSingleObject},
         },
     },
     core::PCWSTR,
 };
 
 use super::{
-    BODY_NAME, FRAME_BUFFER, HEADER_NAME, HEADER_SIZE, SHARED_HANDLE_BODY, SHARED_HANDLE_HEADER,
+    BODY_NAME, FRAME_BUFFER, HEADER_NAME, HEADER_SIZE, OVERLAY_STATE, SHARED_HANDLE_BODY,
+    SHARED_HANDLE_HEADER,
 };
 
 #[derive(Debug)]
@@ -50,20 +54,80 @@ pub fn start_frame_watcher_thread() {
                 header = open_header_mmf().ok();
             }
             if let Some(header_ptr) = header {
-                try_read_shared_memory(
-                    header_ptr,
-                    &frame_ready,
-                    &frame_consumed,
-                    &mut body,
-                    &mut body_handle,
-                );
-                wait_for_frame_ready(&frame_ready);
+                if is_header_valid(header_ptr) {
+                    try_read_shared_memory(
+                        header_ptr,
+                        &frame_ready,
+                        &frame_consumed,
+                        &mut body,
+                        &mut body_handle,
+                    );
+                    if !wait_for_frame_ready(&frame_ready) {
+                        //Blish is closed. Cleanup.
+
+                        if let Some(header) = header {
+                            make_header_invalid(header);
+                            unsafe {
+                                UnmapViewOfFile(header).ok();
+                            }
+                        }
+                        if let Some(body) = body {
+                            unsafe {
+                                UnmapViewOfFile(body).ok();
+                            }
+                        }
+
+                        if let Some(handle) = SHARED_HANDLE_BODY.get() {
+                            if let Ok(mut lock) = handle.lock() {
+                                *lock = HANDLE(0);
+                            }
+                        }
+                        if let Some(handle) = SHARED_HANDLE_HEADER.get() {
+                            if let Ok(mut lock) = handle.lock() {
+                                *lock = HANDLE(0);
+                            }
+                        }
+                        if let Some(frame_buf) = FRAME_BUFFER.get() {
+                            let mut lock = frame_buf.lock().unwrap();
+                            lock.width = 0;
+                            lock.height = 0;
+                            lock.pixels = Vec::new();
+                        }
+                        header = None;
+                        body = None;
+                        body_handle = None;
+                    }
+                } else {
+                    //If Blish is not running, don't bother running this thread too often.
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
             } else {
                 //If Blish is not running, don't bother running this thread too often.
                 std::thread::sleep(std::time::Duration::from_millis(1000));
             }
         }
     });
+}
+
+/// Quick utility to ensure the header is valid.
+fn is_header_valid(header: MEMORY_MAPPED_VIEW_ADDRESS) -> bool {
+    unsafe {
+        let ptr = header.Value as *const u8;
+        let data = from_raw_parts(ptr, HEADER_SIZE);
+        let width = u32::from_le_bytes(data[0..4].try_into().unwrap());
+        let height = u32::from_le_bytes(data[4..8].try_into().unwrap());
+
+        width > 0 && height > 0
+    }
+}
+
+/// Quick utility to make the header invalid should Blish have closed down early.
+fn make_header_invalid(header: MEMORY_MAPPED_VIEW_ADDRESS) {
+    unsafe {
+        let ptr = header.Value as *mut u8;
+        write_unaligned(ptr as *mut u32, 0);
+        write_unaligned(ptr.add(4) as *mut u32, 0);
+    }
 }
 
 fn init_events() -> (HANDLE, HANDLE) {
@@ -85,11 +149,14 @@ fn init_events() -> (HANDLE, HANDLE) {
 }
 
 ///Waits for a frame to be ready
-fn wait_for_frame_ready(frame_ready: &HANDLE) {
-    let result = unsafe { WaitForSingleObject(*frame_ready, Threading::INFINITE) };
-    if result != WAIT_OBJECT_0 {
-        panic!("WaitForSingleObject failed.");
+///Returns false if it assumes blish was closed, true otherwise
+fn wait_for_frame_ready(frame_ready: &HANDLE) -> bool {
+    let result = unsafe { WaitForSingleObject(*frame_ready, 1000) };
+    if result == WAIT_TIMEOUT {
+        //Blish has presumably been closed.
+        return false;
     }
+    return true;
 }
 
 fn open_header_mmf() -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
@@ -225,12 +292,14 @@ fn try_read_shared_memory(
             }
         }
 
-        //Copy frame
-        std::ptr::copy_nonoverlapping(
-            body.unwrap().Value as *const u8,
-            frame.pixels.as_mut_ptr(),
-            total_size,
-        );
+        if let Some(body) = body {
+            //Copy frame
+            std::ptr::copy_nonoverlapping(
+                body.Value as *const u8,
+                frame.pixels.as_mut_ptr(),
+                total_size,
+            );
+        }
 
         SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");
         ResetEvent(*frame_ready).expect("Could not reset the frame_ready event.");

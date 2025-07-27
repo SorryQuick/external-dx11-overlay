@@ -17,7 +17,6 @@ mod rendering;
 
 //Handle to MMFs
 //The header is permanently mapped, while the body is mapped only when nessesary.
-//TODO: Dynamic body
 static SHARED_HANDLE_HEADER: OnceLock<Mutex<HANDLE>> = OnceLock::new();
 static SHARED_HANDLE_BODY: OnceLock<Mutex<HANDLE>> = OnceLock::new();
 static HEADER_NAME: &str = "BlishHUD_Header";

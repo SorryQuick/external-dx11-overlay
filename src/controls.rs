@@ -5,8 +5,9 @@ use windows::Win32::{
     UI::{
         Controls::{WM_MOUSEHOVER, WM_MOUSELEAVE},
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetWindowLongPtrW, WM_LBUTTONDOWN,
-            WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR,
+            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, HTCLIENT, SetWindowLongPtrW,
+            WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP,
+            WM_SETCURSOR,
         },
     },
 };
@@ -54,19 +55,20 @@ unsafe extern "system" fn wnd_proc(
     'local_handling: {
         match msg {
             //Mouse
-            WM_MOUSEMOVE | WM_LBUTTONDOWN | WM_LBUTTONUP | WM_RBUTTONUP | WM_RBUTTONDOWN
-            | WM_MOUSELEAVE | WM_MOUSEHOVER | WM_NCHITTEST | WM_SETCURSOR => {
+            WM_MOUSEMOVE | WM_MOUSELEAVE | WM_MOUSEHOVER | WM_SETCURSOR | WM_NCHITTEST => {
                 let x = get_x_lparam(lparam);
                 let y = get_y_lparam(lparam);
 
                 let is_overlay_pixel = ui::is_overlay_pixel(x as u32, y as u32);
 
+                //Mouse up/down are seemingly handled globally.
+                //So we only need to pass MOUSEMOVE.
                 let id = match msg {
-                    WM_LBUTTONDOWN => 0,
-                    WM_LBUTTONUP => 1,
+                    /*WM_LBUTTONDOWN => 0,
+                    WM_LBUTTONUP => 1,*/
                     WM_MOUSEMOVE => 2,
-                    WM_RBUTTONDOWN => 3,
-                    WM_RBUTTONUP => 4,
+                    /*WM_RBUTTONDOWN => 3,
+                    WM_RBUTTONUP => 4,*/
                     _ => {
                         break 'local_handling;
                     }
@@ -90,7 +92,6 @@ unsafe extern "system" fn wnd_proc(
                     return LRESULT(0);
                 }
             }
-            //For some reason Blish already gets key presses??
             /*WM_KEYDOWN | WM_KEYUP | WM_CHAR | WM_SYSKEYDOWN | WM_SYSKEYUP |  => {
 
             }*/

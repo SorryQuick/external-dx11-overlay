@@ -8,6 +8,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 retour = { version="0.3.1", features=["static-detour"]}
+log = "0.4"
+fern = "0.7"
 
 [dependencies.windows]
 version = "0.56"

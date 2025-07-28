@@ -27,8 +27,19 @@ checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 name = "external-dx11-overlay"
 version = "0.1.0"
 dependencies = [
+ "fern",
+ "log",
  "retour",
  "windows",
+]
+
+[[package]]
+name = "fern"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4316185f709b23713e41e3195f90edef7fb00c3ed4adc79769cf09cc762a3b29"
+dependencies = [
+ "log",
 ]
 
 [[package]]
@@ -56,6 +67,12 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[package]]
+name = "log"
+version = "0.4.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "mach2"

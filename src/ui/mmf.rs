@@ -64,7 +64,7 @@ pub fn start_frame_watcher_thread() {
                     );
                     if !wait_for_frame_ready(&frame_ready) {
                         //Blish is closed. Cleanup.
-
+                        log::info!("BlishHUD was closed. Cleanup.");
                         if let Some(header) = header {
                             make_header_invalid(header);
                             unsafe {
@@ -163,7 +163,7 @@ fn open_header_mmf() -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
     let handle = get_header_handle()?;
     let header_ptr = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, HEADER_SIZE) };
     if header_ptr.Value.is_null() {
-        println!("Could not read header info.");
+        log::error!("Could not read header info.");
         Err(())
     } else {
         Ok(header_ptr)
@@ -183,7 +183,7 @@ fn open_body_mmf(
     }
     let body_ptr = unsafe { MapViewOfFile(body_handle.unwrap(), FILE_MAP_ALL_ACCESS, 0, 0, size) };
     if body_ptr.Value.is_null() {
-        println!("Could not read shared body. Size: {}", size);
+        log::error!("Could not read shared body. Size: {}", size);
         Err(())
     } else {
         Ok(body_ptr)
@@ -258,13 +258,12 @@ fn try_read_shared_memory(
         let height = u32::from_le_bytes(header[4..8].try_into().unwrap());
 
         if width == 0 || height == 0 || width > 10000 || height > 10000 {
-            println!("Width/Height issue: {}x{}", width, height);
+            log::error!("Width/Height issue: {}x{}", width, height);
             return;
         }
 
         //Read the actual frame
         let total_size = (width * height * 4) as usize;
-        //let full_ptr = open_body_mmf(total_size).unwrap();
 
         let mtx = FRAME_BUFFER.get().unwrap();
         let mut frame = mtx.lock().unwrap();

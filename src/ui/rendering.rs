@@ -51,7 +51,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         unsafe {
             if let Ok(device) = swapchain.GetDevice::<ID3D11Device>() {
                 if let Ok(ctx) = (device).GetImmediateContext() {
-                    if OVERLAY_STATE.get().is_none() {
+                    if OVERLAY_STATE.get().is_none() || device.GetDeviceRemovedReason().is_err() {
                         initialize_overlay_state(&device);
                     }
 
@@ -80,7 +80,8 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
                     //Checks if resolution changed. If so, update the state.
                     if new_width != state.width || new_height != state.height {
                         let (txt, shd, viewport) =
-                            create_overlay_texture_and_srv(&device, new_width, new_height).unwrap();
+                            create_overlay_texture_and_srv(&device, new_width, new_height)
+                                .expect("Couuld not create overlay and texture data.");
                         state.overlay_texture = txt;
                         state.shader_resource_view = shd;
                         state.width = new_width;
@@ -98,10 +99,15 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
                         0,
                         Some(&mut mapped),
                     ) {
-                        println!("error mapping texture: {}", e.to_string());
+                        log::error!("Error mapping texture: {}", e.to_string());
                         break 'block;
                     }
-                    copy_frame_into_map(width as usize, height as usize, &mapped).ok();
+
+                    if let Err(_) = copy_frame_into_map(width as usize, height as usize, &mapped) {
+                        log::error!("Could not copy frame into map. ",);
+                        ctx.Unmap(&state.overlay_texture, 0);
+                        break 'block;
+                    }
 
                     ctx.Unmap(&state.overlay_texture, 0);
 
@@ -109,14 +115,21 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
                     if let Ok(buf) = swapchain.GetBuffer::<ID3D11Texture2D>(0) {
                         let mut rtv: Option<ID3D11RenderTargetView> = None;
-                        device
+                        if device
                             .CreateRenderTargetView(
                                 &buf,
                                 None,
                                 Some(&mut rtv as *mut Option<ID3D11RenderTargetView>),
                             )
-                            .ok();
+                            .is_err()
+                        {
+                            log::error!("Could not render target view.");
+                            break 'block;
+                        }
                         ctx.OMSetRenderTargets(Some(&[rtv]), None);
+                    } else {
+                        log::error!("GetBuffer failed.");
+                        break 'block;
                     }
 
                     //Viewport
@@ -157,7 +170,7 @@ fn initialize_overlay_state(device: &ID3D11Device) {
         })))
         .is_err()
     {
-        println!("Error initializing the overlay state.");
+        log::error!("Error initializing the overlay state.");
     }
 }
 

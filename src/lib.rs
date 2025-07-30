@@ -3,12 +3,10 @@ use controls::initialize_controls;
 use fern::Dispatch;
 use hooks::present_hook;
 use std::{
-    fs::OpenOptions,
-    io::{Write, stderr, stdout},
+    fs::{self, OpenOptions},
     mem,
-    os::windows::io,
-    sync::{Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
@@ -21,6 +19,7 @@ use windows::Win32::{
 
 pub mod address_finder;
 pub mod controls;
+pub mod debug;
 pub mod globals;
 pub mod hooks;
 pub mod ui;
@@ -102,7 +101,49 @@ fn detatch() {
     }
 }
 fn enable_logging() {
-    let file = std::fs::File::create("external-dx11-overlay.log").unwrap();
+    let base_name = "external-dx11-overlay";
+    let mut log_path = None;
+
+    // Look for existing log with known pattern
+    let entries = fs::read_dir(".").unwrap();
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+
+        if file_name.starts_with(base_name) && file_name.ends_with(".log") {
+            if let Some(ts_str) = file_name
+                .strip_prefix(base_name)
+                .and_then(|s| s.strip_prefix('-'))
+                .and_then(|s| s.strip_suffix(".log"))
+            {
+                if let Ok(ts) = ts_str.parse::<u64>() {
+                    let file_time = UNIX_EPOCH + Duration::from_secs(ts);
+                    if file_time.elapsed().unwrap_or_default() < Duration::from_secs(60 * 60 * 24) {
+                        log_path = Some(PathBuf::from(file_name.as_ref()));
+                        break;
+                    } else {
+                        fs::remove_file(&*file_name).ok();
+                    }
+                }
+            }
+        }
+    }
+
+    // If no suitable file, create a new one with current timestamp
+    let path = log_path.unwrap_or_else(|| {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        PathBuf::from(format!("{}-{}.log", base_name, now))
+    });
+
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap();
+
     //Init Fern
     Dispatch::new()
         .level(log::LevelFilter::Debug)
@@ -151,5 +192,7 @@ fn enable_logging() {
         log::error!("PANIC at {}: {}", location, payload);
     }));
 
-    log::info!("Logging enabled.");
+    log::info!(
+        "---------------------------------------- New Session ----------------------------------------------"
+    );
 }

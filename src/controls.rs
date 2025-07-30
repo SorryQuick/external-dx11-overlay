@@ -4,15 +4,16 @@ use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
         Controls::{WM_MOUSEHOVER, WM_MOUSELEAVE},
+        Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL},
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, HTCLIENT, SetWindowLongPtrW,
-            WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP,
-            WM_SETCURSOR,
+            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetWindowLongPtrW, WM_KEYDOWN,
+            WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONUP, WM_SETCURSOR,
         },
     },
 };
 
 use crate::{
+    debug::dump_debug_data,
     globals::{self, ORIGINAL_WNDPROC, get_udp_socket_lock},
     ui::{self},
 };
@@ -95,6 +96,15 @@ unsafe extern "system" fn wnd_proc(
             /*WM_KEYDOWN | WM_KEYUP | WM_CHAR | WM_SYSKEYDOWN | WM_SYSKEYUP |  => {
 
             }*/
+            WM_KEYDOWN => {
+                if wparam.0 as u32 == 'P' as u32 {
+                    // Check if CTRL is down
+                    if (unsafe { GetKeyState(VK_CONTROL.0 as i32) } as u16 & 0x8000) != 0 {
+                        dump_debug_data();
+                        return LRESULT(0); // prevent further handling
+                    }
+                }
+            }
             _ => {}
         }
     }

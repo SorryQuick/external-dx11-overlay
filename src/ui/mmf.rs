@@ -5,7 +5,7 @@ use std::{
 
 use windows::{
     Win32::{
-        Foundation::{BOOL, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        Foundation::{BOOL, HANDLE, WAIT_TIMEOUT},
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
@@ -18,8 +18,7 @@ use windows::{
 };
 
 use super::{
-    BODY_NAME, FRAME_BUFFER, HEADER_NAME, HEADER_SIZE, OVERLAY_STATE, SHARED_HANDLE_BODY,
-    SHARED_HANDLE_HEADER,
+    BODY_NAME, FRAME_BUFFER, HEADER_NAME, HEADER_SIZE, SHARED_HANDLE_BODY, SHARED_HANDLE_HEADER,
 };
 
 #[derive(Debug)]

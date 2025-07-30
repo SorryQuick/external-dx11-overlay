@@ -33,8 +33,8 @@ static PS_OVERLAY: &[u8] = include_bytes!("ps_overlay.cso");
 
 //Contains DirectX related stuff that can be reused over many frames.
 pub struct OverlayState {
-    width: u32,
-    height: u32,
+    pub width: u32,
+    pub height: u32,
     overlay_texture: ID3D11Texture2D,
     shader_resource_view: ID3D11ShaderResourceView,
     blend_state: ID3D11BlendState,
@@ -51,11 +51,20 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         unsafe {
             if let Ok(device) = swapchain.GetDevice::<ID3D11Device>() {
                 if let Ok(ctx) = (device).GetImmediateContext() {
-                    if OVERLAY_STATE.get().is_none() || device.GetDeviceRemovedReason().is_err() {
+                    if OVERLAY_STATE.get().is_none() {
+                        initialize_overlay_state(&device);
+                    }
+                    if device.GetDeviceRemovedReason().is_err() {
+                        log::error!("Device removed. Recreating.");
                         initialize_overlay_state(&device);
                     }
 
                     let mut lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
+                    if lock.is_none() {
+                        drop(lock);
+                        initialize_overlay_state(&device);
+                        lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
+                    }
                     let state = lock.as_mut().unwrap();
 
                     let new_width;
@@ -155,22 +164,23 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
 fn initialize_overlay_state(device: &ID3D11Device) {
     let (txt, shd, viewport) = create_overlay_texture_and_srv(device, 1920, 1080).unwrap();
-    if OVERLAY_STATE
-        .set(Mutex::new(Some(OverlayState {
-            width: 1920,
-            height: 1080,
-            overlay_texture: txt,
-            shader_resource_view: shd,
-            blend_state: create_blend_state(device).unwrap(),
-            sampler_state: create_sampler_state(device).unwrap(),
-            vertex_shader: create_vertex_shader(device).unwrap(),
-            pixel_shader: create_pixel_shader(device).unwrap(),
-            viewport,
-            blend_factor: [0.0f32, 0.0f32, 0.0f32, 0.0f32],
-        })))
-        .is_err()
-    {
-        log::error!("Error initializing the overlay state.");
+    let state = OverlayState {
+        width: 1920,
+        height: 1080,
+        overlay_texture: txt,
+        shader_resource_view: shd,
+        blend_state: create_blend_state(device).unwrap(),
+        sampler_state: create_sampler_state(device).unwrap(),
+        vertex_shader: create_vertex_shader(device).unwrap(),
+        pixel_shader: create_pixel_shader(device).unwrap(),
+        viewport,
+        blend_factor: [0.0f32, 0.0f32, 0.0f32, 0.0f32],
+    };
+    let overlay_state = OVERLAY_STATE.get_or_init(|| Mutex::new(None));
+    if let Ok(mut lock) = overlay_state.lock() {
+        *lock = Some(state);
+    } else {
+        log::error!("Poisoned OVERLAY_STATE mutex.");
     }
 }
 

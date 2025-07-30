@@ -5,7 +5,7 @@ use std::{
 
 use windows::{
     Win32::{
-        Foundation::{BOOL, HANDLE, WAIT_TIMEOUT},
+        Foundation::{BOOL, CloseHandle, HANDLE, WAIT_TIMEOUT},
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
@@ -54,23 +54,16 @@ pub fn start_frame_watcher_thread() {
             }
             if let Some(header_ptr) = header {
                 if is_header_valid(header_ptr) {
-                    try_read_shared_memory(
-                        header_ptr,
-                        &frame_ready,
-                        &frame_consumed,
-                        &mut body,
-                        &mut body_handle,
-                    );
                     if !wait_for_frame_ready(&frame_ready) {
                         //Blish is closed. Cleanup.
-                        log::info!("BlishHUD was closed. Cleanup.");
-                        if let Some(header) = header {
+                        log::info!("BlishHUD was (potentially) closed. Cleanup.");
+                        if let Some(header) = header.take() {
                             make_header_invalid(header);
                             unsafe {
                                 UnmapViewOfFile(header).ok();
                             }
                         }
-                        if let Some(body) = body {
+                        if let Some(body) = body.take() {
                             unsafe {
                                 UnmapViewOfFile(body).ok();
                             }
@@ -78,24 +71,43 @@ pub fn start_frame_watcher_thread() {
 
                         if let Some(handle) = SHARED_HANDLE_BODY.get() {
                             if let Ok(mut lock) = handle.lock() {
-                                *lock = HANDLE(0);
+                                if lock.0 != 0 {
+                                    *lock = HANDLE(0);
+                                }
                             }
                         }
                         if let Some(handle) = SHARED_HANDLE_HEADER.get() {
                             if let Ok(mut lock) = handle.lock() {
-                                *lock = HANDLE(0);
+                                if lock.0 != 0 {
+                                    *lock = HANDLE(0);
+                                }
                             }
                         }
                         if let Some(frame_buf) = FRAME_BUFFER.get() {
                             let mut lock = frame_buf.lock().unwrap();
-                            lock.width = 0;
-                            lock.height = 0;
-                            lock.pixels = Vec::new();
+                            if lock.width != 0 || lock.height != 0 || !lock.pixels.is_empty() {
+                                lock.width = 0;
+                                lock.height = 0;
+                                lock.pixels.clear();
+                            }
                         }
-                        header = None;
-                        body = None;
+                        if let Some(h) = body_handle {
+                            if !h.is_invalid() && h.0 != 0 {
+                                unsafe {
+                                    CloseHandle(h).ok();
+                                }
+                            }
+                        }
                         body_handle = None;
                     }
+
+                    try_read_shared_memory(
+                        header_ptr,
+                        &frame_ready,
+                        &frame_consumed,
+                        &mut body,
+                        &mut body_handle,
+                    );
                 } else {
                     //If Blish is not running, don't bother running this thread too often.
                     std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -150,7 +162,7 @@ fn init_events() -> (HANDLE, HANDLE) {
 ///Waits for a frame to be ready
 ///Returns false if it assumes blish was closed, true otherwise
 fn wait_for_frame_ready(frame_ready: &HANDLE) -> bool {
-    let result = unsafe { WaitForSingleObject(*frame_ready, 1000) };
+    let result = unsafe { WaitForSingleObject(*frame_ready, 5000) };
     if result == WAIT_TIMEOUT {
         //Blish has presumably been closed.
         return false;
@@ -268,7 +280,7 @@ fn try_read_shared_memory(
         let mut frame = mtx.lock().unwrap();
 
         //Resize occured
-        if frame.width != width || frame.height != height {
+        if frame.width != width || frame.height != height || body.is_none() {
             frame.width = width;
             frame.height = height;
 

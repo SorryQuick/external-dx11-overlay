@@ -8,8 +8,9 @@ use windows::{
         Foundation::{BOOL, CloseHandle, HANDLE, WAIT_TIMEOUT},
         System::{
             Memory::{
-                FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
-                UnmapViewOfFile,
+                FILE_MAP_ALL_ACCESS, MEM_COMMIT, MEMORY_BASIC_INFORMATION,
+                MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW, PAGE_NOACCESS,
+                UnmapViewOfFile, VirtualQuery,
             },
             Threading::{CreateEventW, ResetEvent, SetEvent, WaitForSingleObject},
         },
@@ -99,6 +100,7 @@ pub fn start_frame_watcher_thread() {
                             }
                         }
                         body_handle = None;
+                        continue;
                     }
 
                     try_read_shared_memory(
@@ -109,6 +111,8 @@ pub fn start_frame_watcher_thread() {
                         &mut body_handle,
                     );
                 } else {
+                    make_header_invalid(header_ptr);
+                    header = None;
                     //If Blish is not running, don't bother running this thread too often.
                     std::thread::sleep(std::time::Duration::from_millis(1000));
                 }
@@ -124,12 +128,30 @@ pub fn start_frame_watcher_thread() {
 fn is_header_valid(header: MEMORY_MAPPED_VIEW_ADDRESS) -> bool {
     unsafe {
         let ptr = header.Value as *const u8;
+        if ptr.is_null() || !is_pointer_valid(ptr, HEADER_SIZE) {
+            return false;
+        }
         let data = from_raw_parts(ptr, HEADER_SIZE);
         let width = u32::from_le_bytes(data[0..4].try_into().unwrap());
         let height = u32::from_le_bytes(data[4..8].try_into().unwrap());
 
         width > 0 && height > 0
     }
+}
+
+unsafe fn is_pointer_valid(ptr: *const u8, len: usize) -> bool {
+    let mut mbi = std::mem::zeroed::<MEMORY_BASIC_INFORMATION>();
+    let result = VirtualQuery(
+        Some(ptr as *const _),
+        &mut mbi,
+        std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+    );
+
+    result != 0
+        && mbi.State == MEM_COMMIT
+        && mbi.Protect != PAGE_NOACCESS
+        && (ptr as usize) >= mbi.BaseAddress as usize
+        && (ptr as usize + len) <= (mbi.BaseAddress as usize + mbi.RegionSize)
 }
 
 /// Quick utility to make the header invalid should Blish have closed down early.

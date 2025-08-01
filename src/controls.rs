@@ -13,7 +13,7 @@ use windows::Win32::{
 };
 
 use crate::{
-    debug::dump_debug_data,
+    debug::{dump_debug_data, restart_blish},
     globals::{self, ORIGINAL_WNDPROC, get_udp_socket_lock},
     ui::{self},
 };
@@ -98,10 +98,15 @@ unsafe extern "system" fn wnd_proc(
             }*/
             WM_KEYDOWN => {
                 if wparam.0 as u32 == 'P' as u32 {
-                    // Check if CTRL is down
                     if (unsafe { GetKeyState(VK_CONTROL.0 as i32) } as u16 & 0x8000) != 0 {
                         dump_debug_data();
-                        return LRESULT(0); // prevent further handling
+                        return LRESULT(0);
+                    }
+                }
+                if wparam.0 as u32 == 'O' as u32 {
+                    if (unsafe { GetKeyState(VK_CONTROL.0 as i32) } as u16 & 0x8000) != 0 {
+                        restart_blish();
+                        return LRESULT(0);
                     }
                 }
             }

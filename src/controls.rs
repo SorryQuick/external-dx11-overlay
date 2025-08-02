@@ -4,10 +4,11 @@ use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
         Controls::{WM_MOUSEHOVER, WM_MOUSELEAVE},
-        Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL},
+        Input::KeyboardAndMouse::{GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_CONTROL},
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetWindowLongPtrW, WM_KEYDOWN,
-            WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONUP, WM_SETCURSOR,
+            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
+            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
+            WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SETFOCUS,
         },
     },
 };
@@ -56,11 +57,11 @@ unsafe extern "system" fn wnd_proc(
     'local_handling: {
         match msg {
             //Mouse
-            WM_MOUSEMOVE | WM_MOUSELEAVE | WM_MOUSEHOVER | WM_SETCURSOR | WM_NCHITTEST => {
+            WM_MOUSEMOVE => {
                 let x = get_x_lparam(lparam);
                 let y = get_y_lparam(lparam);
 
-                let is_overlay_pixel = ui::is_overlay_pixel(x as u32, y as u32);
+                //let is_overlay_pixel = ui::is_overlay_pixel(x as u32, y as u32);
 
                 //Mouse up/down are seemingly handled globally.
                 //So we only need to pass MOUSEMOVE.
@@ -89,9 +90,9 @@ unsafe extern "system" fn wnd_proc(
                         .send_to(&data, "127.0.0.1:".to_owned() + globals::UDPPORT)
                         .ok();
                 }
-                if is_overlay_pixel && msg != WM_LBUTTONUP && msg != WM_RBUTTONUP {
+                /*if is_overlay_pixel && msg == WM_LBUTTONDOWN && msg == WM_RBUTTONDOWN {
                     return LRESULT(0);
-                }
+                }*/
             }
             /*WM_KEYDOWN | WM_KEYUP | WM_CHAR | WM_SYSKEYDOWN | WM_SYSKEYUP |  => {
 
@@ -110,6 +111,15 @@ unsafe extern "system" fn wnd_proc(
                     }
                 }
             }
+            WM_SETFOCUS => grab_focus(hwnd),
+            WM_KILLFOCUS => release_focus(hwnd),
+            WM_ACTIVATEAPP | WM_ACTIVATE => {
+                if wparam.0 != 0 {
+                    grab_focus(hwnd);
+                } else {
+                    release_focus(hwnd);
+                }
+            }
             _ => {}
         }
     }
@@ -119,5 +129,18 @@ unsafe extern "system" fn wnd_proc(
         } else {
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
+    }
+}
+
+fn grab_focus(hwnd: HWND) {
+    unsafe {
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+        SetCapture(hwnd);
+    }
+}
+fn release_focus(hwnd: HWND) {
+    unsafe {
+        ReleaseCapture();
     }
 }

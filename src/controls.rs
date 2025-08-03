@@ -3,12 +3,10 @@ use std::slice::from_raw_parts;
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
-        Controls::{WM_MOUSEHOVER, WM_MOUSELEAVE},
         Input::KeyboardAndMouse::{GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_CONTROL},
         WindowsAndMessaging::{
             CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
-            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP,
-            WM_MOUSEMOVE, WM_NCHITTEST, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SETCURSOR, WM_SETFOCUS,
+            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS,
         },
     },
 };
@@ -16,7 +14,6 @@ use windows::Win32::{
 use crate::{
     debug::{dump_debug_data, restart_blish},
     globals::{self, ORIGINAL_WNDPROC, get_udp_socket_lock},
-    ui::{self},
 };
 
 pub fn initialize_controls(hwnd: HWND) {
@@ -112,12 +109,12 @@ unsafe extern "system" fn wnd_proc(
                 }
             }
             WM_SETFOCUS => grab_focus(hwnd),
-            WM_KILLFOCUS => release_focus(hwnd),
+            WM_KILLFOCUS => release_focus(),
             WM_ACTIVATEAPP | WM_ACTIVATE => {
                 if wparam.0 != 0 {
                     grab_focus(hwnd);
                 } else {
-                    release_focus(hwnd);
+                    release_focus();
                 }
             }
             _ => {}
@@ -134,13 +131,13 @@ unsafe extern "system" fn wnd_proc(
 
 fn grab_focus(hwnd: HWND) {
     unsafe {
-        SetForegroundWindow(hwnd);
+        SetForegroundWindow(hwnd).ok().ok();
         SetFocus(hwnd);
         SetCapture(hwnd);
     }
 }
-fn release_focus(hwnd: HWND) {
+fn release_focus() {
     unsafe {
-        ReleaseCapture();
+        ReleaseCapture().ok();
     }
 }

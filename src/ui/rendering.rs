@@ -26,10 +26,10 @@ use windows::{
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
 
-//These shaders are probably garbage. I know nothing about shaders.
+//Ultra basic shader.
 //Have to be compiled on windows with fxc.
-static VS_OVERLAY: &[u8] = include_bytes!("vs_overlay.cso");
-static PS_OVERLAY: &[u8] = include_bytes!("ps_overlay.cso");
+static VS_OVERLAY: &[u8] = include_bytes!("vs.cso");
+static PS_OVERLAY: &[u8] = include_bytes!("ps.cso");
 
 //Contains DirectX related stuff that can be reused over many frames.
 pub struct OverlayState {

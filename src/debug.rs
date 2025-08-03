@@ -104,8 +104,8 @@ fn kill_process_by_name(target: &str) {
                     // Open process with terminate rights
                     let h_process = OpenProcess(PROCESS_TERMINATE, false, entry.th32ProcessID);
                     if let Ok(handle) = h_process {
-                        TerminateProcess(handle, 1);
-                        CloseHandle(handle);
+                        TerminateProcess(handle, 1).ok();
+                        CloseHandle(handle).ok();
                         println!("Terminated {}", exe_name);
                     } else {
                         println!("Failed to open {}", exe_name);
@@ -118,6 +118,6 @@ fn kill_process_by_name(target: &str) {
             }
         }
 
-        CloseHandle(snapshot);
+        CloseHandle(snapshot).ok();
     }
 }

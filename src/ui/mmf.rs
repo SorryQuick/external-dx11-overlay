@@ -140,18 +140,20 @@ fn is_header_valid(header: MEMORY_MAPPED_VIEW_ADDRESS) -> bool {
 }
 
 unsafe fn is_pointer_valid(ptr: *const u8, len: usize) -> bool {
-    let mut mbi = std::mem::zeroed::<MEMORY_BASIC_INFORMATION>();
-    let result = VirtualQuery(
-        Some(ptr as *const _),
-        &mut mbi,
-        std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
-    );
+    unsafe {
+        let mut mbi = std::mem::zeroed::<MEMORY_BASIC_INFORMATION>();
+        let result = VirtualQuery(
+            Some(ptr as *const _),
+            &mut mbi,
+            std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+        );
 
-    result != 0
-        && mbi.State == MEM_COMMIT
-        && mbi.Protect != PAGE_NOACCESS
-        && (ptr as usize) >= mbi.BaseAddress as usize
-        && (ptr as usize + len) <= (mbi.BaseAddress as usize + mbi.RegionSize)
+        result != 0
+            && mbi.State == MEM_COMMIT
+            && mbi.Protect != PAGE_NOACCESS
+            && (ptr as usize) >= mbi.BaseAddress as usize
+            && (ptr as usize + len) <= (mbi.BaseAddress as usize + mbi.RegionSize)
+    }
 }
 
 /// Quick utility to make the header invalid should Blish have closed down early.

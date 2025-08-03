@@ -1,5 +1,5 @@
 use address_finder::AddressFinder;
-use controls::initialize_controls;
+use controls::{initialize_controls, start_mouse_input_thread};
 use fern::Dispatch;
 use hooks::present_hook;
 use std::{
@@ -90,6 +90,9 @@ fn attach(handle: HINSTANCE) {
         unsafe { HANDLE_NO = handle.0 as u64 };
 
         ui::startup_ui_rendering();
+
+        //MUST BE CALLED IN THIS ORDER
+        start_mouse_input_thread();
         initialize_controls(mainwindow_hwnd);
     });
 }

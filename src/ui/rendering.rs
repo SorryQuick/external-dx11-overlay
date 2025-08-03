@@ -12,8 +12,8 @@ use windows::{
                 D3D11_FILTER_MIN_MAG_MIP_LINEAR, D3D11_FLOAT32_MAX, D3D11_MAP_WRITE_DISCARD,
                 D3D11_MAPPED_SUBRESOURCE, D3D11_SAMPLER_DESC, D3D11_TEXTURE_ADDRESS_CLAMP,
                 D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC, D3D11_VIEWPORT, ID3D11BlendState,
-                ID3D11Device, ID3D11PixelShader, ID3D11RenderTargetView, ID3D11SamplerState,
-                ID3D11ShaderResourceView, ID3D11Texture2D, ID3D11VertexShader,
+                ID3D11Device, ID3D11DeviceContext, ID3D11PixelShader, ID3D11RenderTargetView,
+                ID3D11SamplerState, ID3D11ShaderResourceView, ID3D11Texture2D, ID3D11VertexShader,
             },
             Dxgi::{
                 Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_SAMPLE_DESC},
@@ -23,6 +23,8 @@ use windows::{
     },
     core::{Error, HRESULT},
 };
+
+use crate::hooks::present_hook;
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
 
@@ -35,144 +37,195 @@ static PS_OVERLAY: &[u8] = include_bytes!("ps.cso");
 pub struct OverlayState {
     pub width: u32,
     pub height: u32,
+    device: ID3D11Device,
+    context: ID3D11DeviceContext,
     overlay_texture: ID3D11Texture2D,
     shader_resource_view: ID3D11ShaderResourceView,
     blend_state: ID3D11BlendState,
     sampler_state: ID3D11SamplerState,
     vertex_shader: ID3D11VertexShader,
     pixel_shader: ID3D11PixelShader,
+    target_view: Option<ID3D11RenderTargetView>,
     viewport: D3D11_VIEWPORT,
     blend_factor: [f32; 4],
 }
 
+impl OverlayState {
+    pub fn recreate(
+        &mut self,
+        swapchain: &IDXGISwapChain,
+        new_width: u32,
+        new_height: u32,
+    ) -> (u32, u32) {
+        let (txt, shd, viewport) =
+            create_overlay_texture_and_srv(&self.device, new_width, new_height).unwrap();
+        self.overlay_texture = txt;
+        self.shader_resource_view = shd;
+        self.viewport = viewport;
+
+        self.width = new_width;
+        self.height = new_height;
+
+        if let Ok(rtv) = create_target_view(swapchain, &self.device) {
+            self.target_view = Some(rtv);
+        }
+        (new_width, new_height)
+    }
+}
+
 ///This is our big present hook. Takes a the latest frame sent from Blish in FRAME_BUFFER.
 pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u32) -> HRESULT {
-    'block: {
-        unsafe {
-            if let Ok(device) = swapchain.GetDevice::<ID3D11Device>() {
-                if let Ok(ctx) = (device).GetImmediateContext() {
-                    if OVERLAY_STATE.get().is_none() {
-                        initialize_overlay_state(&device);
-                    }
-                    if device.GetDeviceRemovedReason().is_err() {
-                        log::error!("Device removed. Recreating.");
-                        initialize_overlay_state(&device);
-                    }
+    //Macro to make it less ugly to return early.
+    macro_rules! return_present {
+        () => {
+            return present_hook.call(swapchain, sync_interval, flags);
+        };
+    }
+    unsafe {
+        if OVERLAY_STATE.get().is_none() {
+            initialize_overlay_state(&swapchain);
+        }
 
-                    let mut lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
-                    if lock.is_none() {
-                        drop(lock);
-                        initialize_overlay_state(&device);
-                        lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
-                    }
-                    let state = lock.as_mut().unwrap();
+        //Check if we need to cache stuff over again
+        let mut lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
+        let recreate = if let Some(state) = lock.as_ref() {
+            state.device.GetDeviceRemovedReason().is_err()
+        } else {
+            true
+        };
+        if recreate {
+            drop(lock);
+            initialize_overlay_state(&swapchain);
+            lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
+        }
 
-                    let new_width;
-                    let new_height;
+        let state = lock.as_mut().unwrap();
 
-                    //Quick read to get the sizes.
-                    if let Some(frame_lock) = FRAME_BUFFER.get() {
-                        let frame = frame_lock.lock().unwrap();
-                        if frame.width > 0 && frame.height > 0 {
-                            new_width = frame.width;
-                            new_height = frame.height;
-                        } else {
-                            break 'block;
-                        }
-                    } else {
-                        break 'block;
-                    }
+        //Get newly-received width from blish
+        let (new_width, new_height) = if let Some(frame_lock) = FRAME_BUFFER.get() {
+            let frame = frame_lock.lock().unwrap();
+            if frame.width == 0 || frame.height == 0 {
+                return_present!();
+            }
+            (frame.width, frame.height)
+        } else {
+            return_present!();
+        };
 
-                    let mut width = state.width;
-                    let mut height = state.height;
+        let mut width = state.width;
+        let mut height = state.height;
 
-                    //Checks if resolution changed. If so, update the state.
-                    if new_width != state.width || new_height != state.height {
-                        let (txt, shd, viewport) =
-                            create_overlay_texture_and_srv(&device, new_width, new_height)
-                                .expect("Couuld not create overlay and texture data.");
-                        state.overlay_texture = txt;
-                        state.shader_resource_view = shd;
-                        state.width = new_width;
-                        state.height = new_height;
-                        state.viewport = viewport;
-                        width = new_width;
-                        height = new_height;
-                    }
+        //Checks if resolution changed. If so, update the state.
+        if new_width != state.width || new_height != state.height {
+            (width, height) = state.recreate(&swapchain, new_width, new_height);
+        }
 
-                    let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-                    if let Err(e) = ctx.Map(
-                        &state.overlay_texture,
-                        0,
-                        D3D11_MAP_WRITE_DISCARD,
-                        0,
-                        Some(&mut mapped),
-                    ) {
-                        log::error!("Error mapping texture: {}", e.to_string());
-                        break 'block;
-                    }
+        let ctx = &state.context;
 
-                    if let Err(_) = copy_frame_into_map(width as usize, height as usize, &mapped) {
-                        log::error!("Could not copy frame into map. ",);
-                        ctx.Unmap(&state.overlay_texture, 0);
-                        break 'block;
-                    }
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        if let Err(e) = ctx.Map(
+            &state.overlay_texture,
+            0,
+            D3D11_MAP_WRITE_DISCARD,
+            0,
+            Some(&mut mapped),
+        ) {
+            log::error!("Error mapping texture: {}", e.to_string());
+            return_present!();
+        }
 
-                    ctx.Unmap(&state.overlay_texture, 0);
+        if let Err(_) = copy_frame_into_map(width as usize, height as usize, &mapped) {
+            log::error!("Could not copy frame into map. ",);
+            ctx.Unmap(&state.overlay_texture, 0);
+            return_present!();
+        }
 
-                    ctx.OMSetBlendState(&state.blend_state, Some(&state.blend_factor), 0xffffffff);
+        ctx.Unmap(&state.overlay_texture, 0);
 
-                    if let Ok(buf) = swapchain.GetBuffer::<ID3D11Texture2D>(0) {
-                        let mut rtv: Option<ID3D11RenderTargetView> = None;
-                        if device
-                            .CreateRenderTargetView(
-                                &buf,
-                                None,
-                                Some(&mut rtv as *mut Option<ID3D11RenderTargetView>),
-                            )
-                            .is_err()
-                        {
-                            log::error!("Could not render target view.");
-                            break 'block;
-                        }
-                        ctx.OMSetRenderTargets(Some(&[rtv]), None);
-                    } else {
-                        log::error!("GetBuffer failed.");
-                        break 'block;
-                    }
+        ctx.OMSetBlendState(&state.blend_state, Some(&state.blend_factor), 0xffffffff);
 
-                    //Viewport
-                    ctx.RSSetViewports(Some(&[state.viewport]));
+        if state.target_view.is_none() {
+            if let Ok(trv) = create_target_view(&swapchain, &state.device) {
+                state.target_view = Some(trv);
+            }
+        }
+        if state.target_view.is_some() {
+            ctx.OMSetRenderTargets(Some(&[state.target_view.clone()]), None);
+        }
 
-                    //Shaders
-                    ctx.VSSetShader(&state.vertex_shader, None);
-                    ctx.PSSetShader(&state.pixel_shader, None);
+        //Viewport
+        ctx.RSSetViewports(Some(&[state.viewport]));
 
-                    // Bind SRV and sampler
-                    ctx.PSSetShaderResources(0, Some(&[Some(state.shader_resource_view.clone())]));
-                    ctx.PSSetSamplers(0, Some(&[Some(state.sampler_state.clone())]));
+        //Shaders
+        ctx.VSSetShader(&state.vertex_shader, None);
+        ctx.PSSetShader(&state.pixel_shader, None);
 
-                    // Draw full-screen triangle
-                    ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                    ctx.Draw(3, 0);
-                }
+        // Bind SRV and sampler
+        ctx.PSSetShaderResources(0, Some(&[Some(state.shader_resource_view.clone())]));
+        ctx.PSSetSamplers(0, Some(&[Some(state.sampler_state.clone())]));
+
+        // Draw full-screen triangle
+        ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        ctx.Draw(3, 0);
+
+        present_hook.call(swapchain, sync_interval, flags)
+    }
+}
+
+fn get_device_and_context(
+    swapchain: &IDXGISwapChain,
+) -> Result<(ID3D11Device, ID3D11DeviceContext), ()> {
+    unsafe {
+        if let Ok(device) = swapchain.GetDevice::<ID3D11Device>() {
+            if let Ok(ctx) = (device).GetImmediateContext() {
+                return Ok((device, ctx));
             }
         }
     }
-    unsafe { crate::present_hook.call(swapchain, sync_interval, flags) }
+    Err(())
+}
+fn create_target_view(
+    swapchain: &IDXGISwapChain,
+    device: &ID3D11Device,
+) -> Result<ID3D11RenderTargetView, ()> {
+    unsafe {
+        if let Ok(buf) = swapchain.GetBuffer::<ID3D11Texture2D>(0) {
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            if device
+                .CreateRenderTargetView(
+                    &buf,
+                    None,
+                    Some(&mut rtv as *mut Option<ID3D11RenderTargetView>),
+                )
+                .is_err()
+            {
+                log::error!("Could not render target view.");
+                return Err(());
+            }
+            return Ok(rtv.unwrap());
+        } else {
+            log::error!("GetBuffer failed.");
+            return Err(());
+        }
+    }
 }
 
-fn initialize_overlay_state(device: &ID3D11Device) {
-    let (txt, shd, viewport) = create_overlay_texture_and_srv(device, 1920, 1080).unwrap();
+fn initialize_overlay_state(swapchain: &IDXGISwapChain) {
+    let (device, context) =
+        get_device_and_context(swapchain).expect("Could not get device and context from swapchain");
+    let (txt, shd, viewport) = create_overlay_texture_and_srv(&device, 1920, 1080).unwrap();
     let state = OverlayState {
         width: 1920,
         height: 1080,
+        device: device.clone(),
+        context: context.clone(),
         overlay_texture: txt,
         shader_resource_view: shd,
-        blend_state: create_blend_state(device).unwrap(),
-        sampler_state: create_sampler_state(device).unwrap(),
-        vertex_shader: create_vertex_shader(device).unwrap(),
-        pixel_shader: create_pixel_shader(device).unwrap(),
+        blend_state: create_blend_state(&device).unwrap(),
+        sampler_state: create_sampler_state(&device).unwrap(),
+        vertex_shader: create_vertex_shader(&device).unwrap(),
+        pixel_shader: create_pixel_shader(&device).unwrap(),
+        target_view: None,
         viewport,
         blend_factor: [0.0f32, 0.0f32, 0.0f32, 0.0f32],
     };
@@ -204,7 +257,6 @@ fn copy_frame_into_map(
 
 ///Creates the Texture2D for a given dimension.
 ///It will be reused for as long as the resolution doesn't change.
-//TODO: Verify this, my DirectX knowledge is not great.
 pub fn create_overlay_texture(
     device: &ID3D11Device,
     width: u32,

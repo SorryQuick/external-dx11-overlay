@@ -3,6 +3,8 @@ This is a simple guide on how to use BlishHUD on Linux / Mac / Steam Deck. This 
 For more technical information, read the README of this repo. This is not a "hacky" way that relies on window transparency to work. 
 Instead, the BlishHUD window is hidden entirely and Blish is rendered inside the game, similarly to other addons such as arcdps. This has the side-effect of allowing you to play in full-screen if you wish.
 
+This can also be used on windows, albeit with less advantages. For example, it could allow frame-gen, full-screen gameplay, etc...
+
 # Steps
 ## Step 1
 Go to the [release section](https://github.com/SorryQuick/external-dx11-overlay/releases) of this repository and download the latest release zip file (not the source code).
@@ -20,7 +22,9 @@ Under Browse, select "Gw2-Simple-Addon-Loader.exe, which can be found inside the
 
 Example Path: /home/user/.steam/steam/steamapps/common/Guild Wars 2/addons/LOADER_public/Gw2-Simple-Addon-Loader.exe
 
-You may need to change the compatibility tool (proton version) for that new entry. Statistics like time played will still be attributed to the real steam game. The steam overlay will also work if enabled.
+You **need** to change the compatibility tool (proton version) for that new entry. The default/global one will not be applied properly for some reason. 
+
+Statistics like time played will still be attributed to the real steam game. The steam overlay will also work if enabled.
 
 ### Using Steam as the provider / Login with Steam user
 If you are using a Steam account instead of an ArenaNet one, you must add USE_STEAM_LOGIN=1 as an envar. For example:

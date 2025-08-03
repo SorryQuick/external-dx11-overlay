@@ -48,7 +48,14 @@ From here, "Install an application" -> "Cancel" -> "Install a Windows DLL or com
 If you are **not** using steam, do the same thing, but instead of using protontricks, run ```WINEPREFIX=your_prefix winetricks```.
 
 # Troubleshoot
-If it does not work, read the ```log.txt``` file located in the same folder as Gw2-Simple-Addon-Loader.exe. For further help, ask on the blish hud discord.
+If it does not work, there is a ```log.txt``` file located in the same folder as Gw2-Simple-Addon-Loader.exe, and another in the Blish folder.
+
+Common troubleshooting steps:
+- Delete the prefix. This will cause you to lose your settings, but can fix a variety of issues.
+- Check if Blish is running after launching the game with the loader (top / task manager).
+
+
+For further help, ask on the blish hud discord.
 
 # Screenshots
 <img width="1918" height="1079" alt="image" src="https://github.com/user-attachments/assets/d5f72a1f-5e0f-406b-ad7c-e6692d1acb5f" />

@@ -53,6 +53,7 @@ If it does not work, there is a ```log.txt``` file located in the same folder as
 Common troubleshooting steps:
 - Delete the prefix. This will cause you to lose your settings, but can fix a variety of issues.
 - Check if Blish is running after launching the game with the loader (top / task manager).
+- If performance feels bad, verify that the game is rendering with proton and dxvk (eg. with mangohud).
 
 
 For further help, ask on the blish hud discord.

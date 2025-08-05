@@ -3,16 +3,19 @@ use std::{
     sync::Mutex,
 };
 
+use crate::globals;
 use windows::{
     Win32::{
-        Foundation::{BOOL, CloseHandle, HANDLE, WAIT_TIMEOUT},
+        Foundation::{BOOL, CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEM_COMMIT, MEMORY_BASIC_INFORMATION,
                 MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW, PAGE_NOACCESS,
                 UnmapViewOfFile, VirtualQuery,
             },
-            Threading::{CreateEventW, ResetEvent, SetEvent, WaitForSingleObject},
+            Threading::{
+                self, CreateEventW, OpenMutexW, ResetEvent, SetEvent, WaitForSingleObject,
+            },
         },
     },
     core::PCWSTR,
@@ -186,12 +189,48 @@ fn init_events() -> (HANDLE, HANDLE) {
 ///Waits for a frame to be ready
 ///Returns false if it assumes blish was closed, true otherwise
 fn wait_for_frame_ready(frame_ready: &HANDLE) -> bool {
-    let result = unsafe { WaitForSingleObject(*frame_ready, 5000) };
-    if result == WAIT_TIMEOUT {
-        //Blish has presumably been closed.
-        return false;
+    loop {
+        let result = unsafe { WaitForSingleObject(*frame_ready, 100) };
+        if result == WAIT_TIMEOUT {
+            if !is_blish_alive() {
+                return false;
+            } else {
+                //TODO: CHECK IF WE ARE HIDING UI OR JUST NOT SENDING FRAMES BUT SHOULD HOLD THE
+                //LAST
+                continue;
+            }
+        } else if result == WAIT_OBJECT_0 {
+            return true;
+        } else {
+            return false;
+        }
     }
-    return true;
+}
+
+//Simply pings the mutex in the blish fork, to check if it's still up and hasn't crashed.
+fn is_blish_alive() -> bool {
+    let handle = globals::LIVE_MUTEX.get_or_init(|| unsafe {
+        let name: Vec<u16> = "Global\\blish_isalive_mutex"
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+
+        OpenMutexW(
+            Threading::SYNCHRONIZATION_ACCESS_RIGHTS(0x00100000),
+            false,
+            PCWSTR(name.as_ptr()),
+        )
+        .ok()
+    });
+
+    if let Some(h) = handle {
+        matches!(
+            unsafe { WaitForSingleObject(*h, 0) },
+            WAIT_OBJECT_0 | WAIT_TIMEOUT
+        )
+    } else {
+        false
+    }
 }
 
 fn open_header_mmf() -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {

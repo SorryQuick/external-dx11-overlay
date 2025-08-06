@@ -23,7 +23,8 @@ static SHARED_HANDLE_BODY: OnceLock<Mutex<HANDLE>> = OnceLock::new();
 static HEADER_NAME: &str = "BlishHUD_Header";
 static BODY_NAME: &str = "BlishHUD_Body";
 
-const HEADER_SIZE: usize = 8;
+//See C# for description
+const HEADER_SIZE: usize = 12;
 
 ///Simple utility to verify if a given coordinate is over the overlay. Used for mouse input mostly.
 pub fn is_overlay_pixel(x: u32, y: u32) -> bool {

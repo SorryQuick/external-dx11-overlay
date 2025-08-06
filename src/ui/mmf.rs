@@ -29,6 +29,7 @@ use super::{
 pub struct SharedFrame {
     pub width: u32,
     pub height: u32,
+    pub hold: bool,
     pub pixels: Vec<u8>, // RGBA values in pairs of 4 bytes.
 }
 
@@ -36,6 +37,7 @@ pub fn get_blank_shared_frame() -> SharedFrame {
     let sf = SharedFrame {
         width: 0,
         height: 0,
+        hold: false,
         pixels: Vec::new(),
     };
     sf
@@ -92,6 +94,7 @@ pub fn start_frame_watcher_thread() {
                             if lock.width != 0 || lock.height != 0 || !lock.pixels.is_empty() {
                                 lock.width = 0;
                                 lock.height = 0;
+                                lock.hold = false;
                                 lock.pixels.clear();
                             }
                         }
@@ -189,14 +192,34 @@ fn init_events() -> (HANDLE, HANDLE) {
 ///Waits for a frame to be ready
 ///Returns false if it assumes blish was closed, true otherwise
 fn wait_for_frame_ready(frame_ready: &HANDLE) -> bool {
+    let mut is_overlay_hidden = false;
     loop {
         let result = unsafe { WaitForSingleObject(*frame_ready, 100) };
         if result == WAIT_TIMEOUT {
-            if !is_blish_alive() {
+            if is_overlay_hidden {
+                continue;
+            } else if !is_blish_alive() {
                 return false;
             } else {
-                //TODO: CHECK IF WE ARE HIDING UI OR JUST NOT SENDING FRAMES BUT SHOULD HOLD THE
-                //LAST
+                //If Blish is still alive but we did not get a frame within the timeout,
+                //We need to check if it went dead because eg. the UI is hidden
+                //or eg. the frame did not change.
+                if let Some(frame) = FRAME_BUFFER.get() {
+                    if let Ok(mut lock) = frame.lock() {
+                        if lock.hold {
+                            is_overlay_hidden = false;
+                            continue;
+                        } else {
+                            is_overlay_hidden = true;
+                            lock.width = 0;
+                            lock.height = 0;
+                            lock.hold = false;
+                            lock.pixels.clear();
+                            continue;
+                        }
+                    }
+                }
+                log::error!("Failed to acquired the FRAME_BUFFER.");
                 continue;
             }
         } else if result == WAIT_OBJECT_0 {
@@ -331,6 +354,10 @@ fn try_read_shared_memory(
         let width = u32::from_le_bytes(header[0..4].try_into().unwrap());
         let height = u32::from_le_bytes(header[4..8].try_into().unwrap());
 
+        //Whether to hold the frame if no other is sent after that. (Eg if the frame hasn't changed)
+        let hold_u32 = u32::from_le_bytes(header[8..12].try_into().unwrap());
+        let hold = hold_u32 != 0;
+
         if width == 0 || height == 0 || width > 10000 || height > 10000 {
             log::error!("Width/Height issue: {}x{}", width, height);
             return;
@@ -372,6 +399,7 @@ fn try_read_shared_memory(
                 frame.pixels.as_mut_ptr(),
                 total_size,
             );
+            frame.hold = hold;
         }
 
         SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");

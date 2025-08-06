@@ -1,12 +1,12 @@
 use address_finder::AddressFinder;
+use chrono::Local;
 use controls::{initialize_controls, start_mouse_input_thread};
 use fern::Dispatch;
 use hooks::present_hook;
 use std::{
-    fs::{self, OpenOptions},
+    fs::{OpenOptions, create_dir_all},
     mem,
     path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
@@ -104,48 +104,19 @@ fn detatch() {
     }
 }
 fn enable_logging() {
-    let base_name = "external-dx11-overlay";
-    let mut log_path = None;
+    let file = {
+        let logs_dir = PathBuf::from("addons/LOADER_public/logs");
+        create_dir_all(&logs_dir).expect("Failed to create logs directory");
 
-    // Look for existing log with known pattern
-    let entries = fs::read_dir(".").unwrap();
-    for entry in entries.flatten() {
-        let file_name = entry.file_name();
-        let file_name = file_name.to_string_lossy();
+        let filename = format!("dll-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+        let filepath = logs_dir.join(filename);
 
-        if file_name.starts_with(base_name) && file_name.ends_with(".log") {
-            if let Some(ts_str) = file_name
-                .strip_prefix(base_name)
-                .and_then(|s| s.strip_prefix('-'))
-                .and_then(|s| s.strip_suffix(".log"))
-            {
-                if let Ok(ts) = ts_str.parse::<u64>() {
-                    let file_time = UNIX_EPOCH + Duration::from_secs(ts);
-                    if file_time.elapsed().unwrap_or_default() < Duration::from_secs(60 * 60 * 24) {
-                        log_path = Some(PathBuf::from(file_name.as_ref()));
-                        break;
-                    } else {
-                        fs::remove_file(&*file_name).ok();
-                    }
-                }
-            }
-        }
-    }
-
-    // If no suitable file, create a new one with current timestamp
-    let path = log_path.unwrap_or_else(|| {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        PathBuf::from(format!("{}-{}.log", base_name, now))
-    });
-
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .unwrap();
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filepath)
+            .expect("Failed to open log file")
+    };
 
     //Init Fern
     Dispatch::new()
@@ -153,21 +124,23 @@ fn enable_logging() {
         .chain(std::io::stdout())
         .chain(file)
         .format(|out, message, record| {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
+            let now = Local::now();
             if record.level() == log::Level::Error {
                 out.finish(format_args!(
-                    "[{}][{}][{}:{}] {}",
-                    now,
+                    "[{}] [external-dx11-overlay] [{}] [{}:{}] {}",
+                    now.format("%Y-%m-%d %H:%M:%S"),
                     record.level(),
                     record.file().unwrap_or("<unknown>"),
                     record.line().unwrap_or(0),
                     message
                 ))
             } else {
-                out.finish(format_args!("[{}][{}] {}", now, record.level(), message))
+                out.finish(format_args!(
+                    "[{}] [external-dx11-overlay] [{}] {}",
+                    now.format("%Y-%m-%d %H:%M:%S"),
+                    record.level(),
+                    message
+                ))
             }
         })
         .apply()

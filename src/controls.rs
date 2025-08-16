@@ -3,6 +3,7 @@ use std::{
     slice::from_raw_parts,
     sync::{
         OnceLock,
+        atomic::Ordering,
         mpsc::{Sender, channel},
     },
 };
@@ -21,8 +22,8 @@ use windows::Win32::{
 };
 
 use crate::{
-    debug::{dump_debug_data, restart_blish},
     globals::{self, ORIGINAL_WNDPROC},
+    keybinds::{KEYBINDS, get_current_keybind},
 };
 
 pub fn initialize_controls(hwnd: HWND) {
@@ -101,17 +102,10 @@ unsafe extern "system" fn wnd_proc(
                 }*/
             }
             WM_KEYDOWN => {
-                let ctrl_pressed =
-                    (unsafe { GetKeyState(VK_CONTROL.0 as i32) } as u16 & 0x8000) != 0;
-                let alt_pressed = (unsafe { GetKeyState(VK_MENU.0 as i32) } as u16 & 0x8000) != 0;
-
-                if ctrl_pressed && alt_pressed {
-                    if wparam.0 as u32 == 'P' as u32 {
-                        dump_debug_data();
-                        return LRESULT(0);
-                    }
-                    if wparam.0 as u32 == 'O' as u32 {
-                        restart_blish();
+                if let Some(map) = KEYBINDS.get() {
+                    let combo = get_current_keybind(wparam.0 as u32);
+                    if let Some(action) = map.get(&combo) {
+                        action();
                         return LRESULT(0);
                     }
                 }

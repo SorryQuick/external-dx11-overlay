@@ -3,6 +3,7 @@ use chrono::Local;
 use controls::{initialize_controls, start_mouse_input_thread};
 use fern::Dispatch;
 use hooks::present_hook;
+use keybinds::init_keybinds;
 use std::{
     fs::{OpenOptions, create_dir_all},
     mem,
@@ -22,6 +23,7 @@ pub mod controls;
 pub mod debug;
 pub mod globals;
 pub mod hooks;
+pub mod keybinds;
 pub mod ui;
 pub mod utils;
 
@@ -89,6 +91,7 @@ fn attach(handle: HINSTANCE) {
 
         unsafe { HANDLE_NO = handle.0 as u64 };
 
+        init_keybinds();
         ui::startup_ui_rendering();
 
         //MUST BE CALLED IN THIS ORDER

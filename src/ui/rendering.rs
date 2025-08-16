@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, atomic::Ordering};
 
 use windows::{
     Win32::{
@@ -24,7 +24,7 @@ use windows::{
     core::{Error, HRESULT},
 };
 
-use crate::hooks::present_hook;
+use crate::{globals::DEBUG_FEATURES, hooks::present_hook};
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
 
@@ -78,8 +78,11 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
     //Macro to make it less ugly to return early.
     macro_rules! return_present {
         () => {
-            return present_hook.call(swapchain, sync_interval, flags);
+            return present_hook.call(swapchain, sync_interval, flags)
         };
+    }
+    if !DEBUG_FEATURES.rendering_enabled.load(Ordering::Relaxed) {
+        unsafe { return_present!() }
     }
     unsafe {
         if OVERLAY_STATE.get().is_none() {

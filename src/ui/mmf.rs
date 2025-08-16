@@ -1,9 +1,12 @@
 use std::{
-    ffi::OsStr, os::windows::ffi::OsStrExt, ptr::write_unaligned, slice::from_raw_parts,
-    sync::Mutex,
+    ffi::OsStr,
+    os::windows::ffi::OsStrExt,
+    ptr::write_unaligned,
+    slice::from_raw_parts,
+    sync::{Mutex, atomic::Ordering},
 };
 
-use crate::globals;
+use crate::globals::{self, DEBUG_FEATURES};
 use windows::{
     Win32::{
         Foundation::{BOOL, CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
@@ -345,6 +348,12 @@ fn try_read_shared_memory(
     body_handle: &mut Option<HANDLE>,
 ) {
     unsafe {
+        if !DEBUG_FEATURES.processing_enabled.load(Ordering::Relaxed) {
+            SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");
+            ResetEvent(*frame_ready).expect("Could not reset the frame_ready event.");
+            return;
+        }
+
         let header_ptr = header.Value as *mut u8;
 
         //Header data

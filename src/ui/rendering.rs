@@ -24,7 +24,7 @@ use windows::{
     core::{Error, HRESULT},
 };
 
-use crate::{globals::DEBUG_FEATURES, hooks::present_hook};
+use crate::{debug::DEBUG_FEATURES, hooks::present_hook};
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
 

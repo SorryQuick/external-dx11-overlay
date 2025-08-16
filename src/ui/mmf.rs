@@ -6,7 +6,10 @@ use std::{
     sync::{Mutex, atomic::Ordering},
 };
 
-use crate::globals::{self, DEBUG_FEATURES};
+use crate::{
+    debug::DEBUG_FEATURES,
+    globals::{self},
+};
 use windows::{
     Win32::{
         Foundation::{BOOL, CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},

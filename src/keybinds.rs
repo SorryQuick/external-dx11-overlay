@@ -7,10 +7,7 @@ use std::{
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU, VK_SHIFT};
 
-use crate::{
-    debug::{dump_debug_data, restart_blish},
-    globals::DEBUG_FEATURES,
-};
+use crate::debug::{DEBUG_FEATURES, dump_debug_data, restart_blish};
 
 //Handle keybinds and custom keybinds
 #[derive(Eq, Hash, PartialEq, Debug)]

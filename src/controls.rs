@@ -3,7 +3,6 @@ use std::{
     slice::from_raw_parts,
     sync::{
         OnceLock,
-        atomic::Ordering,
         mpsc::{Sender, channel},
     },
 };
@@ -11,9 +10,7 @@ use std::{
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
-        Input::KeyboardAndMouse::{
-            GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_CONTROL, VK_MENU,
-        },
+        Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, SetFocus},
         WindowsAndMessaging::{
             CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
             WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS,

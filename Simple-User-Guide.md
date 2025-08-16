@@ -48,7 +48,7 @@ From here, "Install an application" -> "Cancel" -> "Install a Windows DLL or com
 If you are **not** using steam, do the same thing, but instead of using protontricks, run ```WINEPREFIX=your_prefix winetricks```.
 
 # Troubleshoot
-If it does not work, there is a ```log.txt``` file located in the same folder as Gw2-Simple-Addon-Loader.exe, and another in the Blish folder.
+If it does not work, many logs can be found in a /logs subfolder next to the loader's exe.
 
 Common troubleshooting steps:
 - Delete the prefix. This will cause you to lose your settings, but can fix a variety of issues.

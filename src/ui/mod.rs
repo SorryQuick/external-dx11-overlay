@@ -1,4 +1,4 @@
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, atomic::AtomicBool};
 
 use mmf::{SharedFrame, get_blank_shared_frame, start_frame_watcher_thread};
 use rendering::{OverlayState, detoured_present};
@@ -11,6 +11,9 @@ use windows::{
 pub static FRAME_BUFFER: OnceLock<Mutex<SharedFrame>> = OnceLock::new();
 
 pub static OVERLAY_STATE: OnceLock<Mutex<Option<OverlayState>>> = OnceLock::new();
+
+pub static HOLD_RENDERING: AtomicBool = AtomicBool::new(false);
+pub static FORCE_RENDER: AtomicBool = AtomicBool::new(false);
 
 mod mmf;
 mod rendering;

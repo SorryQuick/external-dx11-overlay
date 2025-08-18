@@ -9,6 +9,7 @@ use std::{
 use crate::{
     debug::DEBUG_FEATURES,
     globals::{self},
+    ui::HOLD_RENDERING,
 };
 use windows::{
     Win32::{
@@ -101,6 +102,7 @@ pub fn start_frame_watcher_thread() {
                                 lock.width = 0;
                                 lock.height = 0;
                                 lock.hold = false;
+                                HOLD_RENDERING.store(false, Ordering::Relaxed);
                                 lock.pixels.clear();
                             }
                         }
@@ -221,6 +223,7 @@ fn wait_for_frame_ready(frame_ready: &HANDLE) -> bool {
                             lock.height = 0;
                             lock.hold = false;
                             lock.pixels.clear();
+                            HOLD_RENDERING.store(false, Ordering::Relaxed);
                             continue;
                         }
                     }
@@ -412,6 +415,7 @@ fn try_read_shared_memory(
                 total_size,
             );
             frame.hold = hold;
+            HOLD_RENDERING.store(hold, Ordering::Relaxed);
         }
 
         SetEvent(*frame_consumed).expect("Could not set the frame_consumed event.");

@@ -1,5 +1,8 @@
 use std::{
-    sync::{Mutex, atomic::Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Instant,
 };
 
@@ -34,6 +37,7 @@ use crate::{
         statistics::{self, send_statistic},
     },
     hooks::present_hook,
+    ui::{FORCE_RENDER, HOLD_RENDERING},
 };
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
@@ -98,6 +102,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
     unsafe {
         if OVERLAY_STATE.get().is_none() {
             initialize_overlay_state(&swapchain);
+            FORCE_RENDER.store(true, Ordering::Relaxed);
         }
 
         //Check if we need to cache stuff over again
@@ -111,6 +116,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
             drop(lock);
             initialize_overlay_state(&swapchain);
             lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
+            FORCE_RENDER.store(true, Ordering::Relaxed);
         }
 
         let state = lock.as_mut().unwrap();
@@ -132,29 +138,35 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         //Checks if resolution changed. If so, update the state.
         if new_width != state.width || new_height != state.height {
             (width, height) = state.recreate(&swapchain, new_width, new_height);
+            FORCE_RENDER.store(true, Ordering::Relaxed);
         }
 
         let ctx = &state.context;
 
-        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-        if let Err(e) = ctx.Map(
-            &state.overlay_texture,
-            0,
-            D3D11_MAP_WRITE_DISCARD,
-            0,
-            Some(&mut mapped),
-        ) {
-            log::error!("Error mapping texture: {}", e.to_string());
-            return_present!();
-        }
+        if FORCE_RENDER.load(Ordering::Relaxed)
+            || !HOLD_RENDERING.load(Ordering::Relaxed)
+            || DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed)
+        {
+            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+            if let Err(e) = ctx.Map(
+                &state.overlay_texture,
+                0,
+                D3D11_MAP_WRITE_DISCARD,
+                0,
+                Some(&mut mapped),
+            ) {
+                log::error!("Error mapping texture: {}", e.to_string());
+                return_present!();
+            }
 
-        if let Err(_) = copy_frame_into_map(width as usize, height as usize, &mapped) {
-            log::error!("Could not copy frame into map. ",);
+            if let Err(_) = copy_frame_into_map(width as usize, height as usize, &mapped) {
+                log::error!("Could not copy frame into map. ",);
+                ctx.Unmap(&state.overlay_texture, 0);
+                return_present!();
+            }
+
             ctx.Unmap(&state.overlay_texture, 0);
-            return_present!();
         }
-
-        ctx.Unmap(&state.overlay_texture, 0);
 
         ctx.OMSetBlendState(&state.blend_state, Some(&state.blend_factor), 0xffffffff);
 
@@ -181,6 +193,8 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         // Draw full-screen triangle
         ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx.Draw(3, 0);
+
+        FORCE_RENDER.store(false, Ordering::Relaxed);
 
         //Stats
         let frame_time_custom = start.elapsed().as_nanos() as u32;
@@ -265,6 +279,7 @@ fn initialize_overlay_state(swapchain: &IDXGISwapChain) {
 }
 
 ///This function copies the data from FRAME_BUFFER into mapped data
+///This is ULTRA SLOW. But without having proper rectangles, hard to do better.
 fn copy_frame_into_map(
     width: usize,
     height: usize,
@@ -273,20 +288,25 @@ fn copy_frame_into_map(
     let frame_lock = FRAME_BUFFER.get().unwrap();
     let mut frame = frame_lock.lock().unwrap();
 
-    //Draw the debug overlay if it's enabled. It's rather slow, but we don't care
-    //since it's for debugging only anyway.
+    //Draw the debug overlay if it's enabled
     if DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed) {
         draw_debug_overlay(&mut frame.pixels, width as u32);
     }
 
+    let i1 = Instant::now();
+    let row_pitch = mapped.RowPitch as usize;
+    let dst_ptr = mapped.pData as *mut u8;
+
     //Copy to GPU
     for y in 0..height as usize {
         unsafe {
-            let src_row = frame.pixels.as_ptr().add(y * width as usize * 4);
-            let dst_row = (mapped.pData as *mut u8).add(y * mapped.RowPitch as usize);
-            std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4);
-        };
+            let src = frame.pixels.as_ptr().add(y * width * 4);
+            let dst = dst_ptr.add(y * row_pitch);
+
+            std::ptr::copy_nonoverlapping(src, dst, width * 4);
+        }
     }
+    println!("Took: {}ns", i1.elapsed().as_nanos());
     Ok(())
 }
 

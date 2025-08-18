@@ -13,7 +13,7 @@ use crate::{
         debug_overlay::{OVERLAY_MODE, clear_debug_overlay, overlay_mode, refresh_overlay_buffer},
         dump_debug_data, restart_blish,
     },
-    ui::FRAME_BUFFER,
+    ui::{FORCE_RENDER, FRAME_BUFFER},
 };
 
 //Handle keybinds and custom keybinds
@@ -157,6 +157,8 @@ fn toggle_debug_overlay() {
             let width = frame.width;
             clear_debug_overlay(&mut frame.pixels, width);
         }
+
+        FORCE_RENDER.store(true, Ordering::Relaxed);
     } else {
         refresh_overlay_buffer(None);
     }

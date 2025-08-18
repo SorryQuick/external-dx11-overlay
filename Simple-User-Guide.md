@@ -48,15 +48,9 @@ From here, "Install an application" -> "Cancel" -> "Install a Windows DLL or com
 If you are **not** using steam, do the same thing, but instead of using protontricks, run ```WINEPREFIX=your_prefix winetricks```.
 
 # Troubleshoot
-If it does not work, many logs can be found in a /logs subfolder next to the loader's exe.
+See this [troubleshooting guide](https://github.com/SorryQuick/external-dx11-overlay/blob/master/Troubleshooting-Guide.md).
 
-Common troubleshooting steps:
-- Delete the prefix. This will cause you to lose your settings, but can fix a variety of issues.
-- Check if Blish is running after launching the game with the loader (top / task manager).
-- If performance feels bad, verify that the game is rendering with proton and dxvk (eg. with mangohud).
-
-
-For further help, ask on the blish hud discord.
+For further help, ask on the blish hud discord or create an issue on github.
 
 # Screenshots
 <img width="1918" height="1079" alt="image" src="https://github.com/user-attachments/assets/d5f72a1f-5e0f-406b-ad7c-e6692d1acb5f" />

@@ -1,11 +1,14 @@
 use std::{
-    collections::VecDeque,
-    sync::{Mutex, MutexGuard, OnceLock, atomic::Ordering},
+    collections::{HashMap, VecDeque},
+    sync::{
+        Mutex, MutexGuard, OnceLock,
+        atomic::{AtomicU8, Ordering},
+    },
 };
 
 use fontdue::{Font, FontSettings};
 
-use super::DEBUG_FEATURES;
+use super::{DEBUG_FEATURES, statistics::debug_stat};
 
 //---------------------------------------- Debug Overlay ---------------------------------------
 //Is always drawn at 0,0 for minimal confusion and complexity
@@ -14,12 +17,27 @@ use super::DEBUG_FEATURES;
 static OVERLAY: OnceLock<Box<[u8]>> = OnceLock::new();
 const OVERLAY_WIDTH: usize = 600;
 const OVERLAY_HEIGHT: usize = 180;
+const MAX_X: f32 = OVERLAY_WIDTH as f32 - 5.0;
+
+//Current mode of the overlay.
+pub static OVERLAY_MODE: AtomicU8 = AtomicU8::new(0);
+pub mod overlay_mode {
+    pub const LOG_MODE: u8 = 0;
+    pub const STAT_MODE: u8 = 1;
+}
+
+//Font. Because I don't want users to have to install corefonts to their wine prefix.
+//Steam automatically links to fonts, but manually created prefixes do NOT.
+//So we link it statically for compatiblity purposes.
 static FONT_DATA: &[u8] = include_bytes!("../ui/segoeui.ttf");
 static FONT: OnceLock<Font> = OnceLock::new();
 const FONT_SIZE: f32 = 12.0;
+
+//Log. Shows the same thing as what gets written to the log files.
 static LOG: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
 const MAX_LOG_LINES: usize = 12;
 
+//Background color for the overlay.
 const DEBUG_OVERLAY_BG_R: u8 = 0;
 const DEBUG_OVERLAY_BG_G: u8 = 0;
 const DEBUG_OVERLAY_BG_B: u8 = 20;
@@ -73,35 +91,84 @@ pub fn add_to_debug_log_overlay(str: String) {
     log.push_front(str);
     if DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed) {
         drop(log);
-        refresh_overlay_buffer();
+        refresh_overlay_buffer(None);
     }
 }
 
-pub fn refresh_overlay_buffer() {
+pub fn refresh_overlay_buffer(stats: Option<&HashMap<u32, u32>>) {
     let overlay = get_overlay();
     let overlay_ptr = overlay.as_ptr() as *mut u8;
     let log = get_log_lock();
 
     let mut y = 12.0;
 
-    let max_x = OVERLAY_WIDTH as f32 - 5.0;
-
     //Flush the previous buffer
     clear_log_area(overlay_ptr);
 
     unsafe {
-        for line in log.iter().rev() {
-            let mut x = 2.0;
-            for c in line.chars() {
-                if x + FONT_SIZE >= max_x {
-                    //Overflow
-                    break;
+        match OVERLAY_MODE.load(Ordering::Relaxed) {
+            //Log
+            overlay_mode::LOG_MODE => {
+                for line in log.iter().rev() {
+                    let mut x = 2.0;
+                    for c in line.chars() {
+                        if x + FONT_SIZE >= MAX_X {
+                            //Overflow
+                            break;
+                        }
+                        x = draw_char(overlay_ptr, x, y, c);
+                    }
+                    y += FONT_SIZE + 2.0;
                 }
-                x = draw_char(overlay_ptr, x, y, c);
             }
-            y += FONT_SIZE + 2.0;
+            //Statistics
+            overlay_mode::STAT_MODE => {
+                if let Some(stats) = stats {
+                    let mut x = 2.0;
+
+                    let frame_time_custom = stats.get(&debug_stat::FRAME_TIME_CUSTOM).unwrap();
+                    let frame_time_total = stats.get(&debug_stat::FRAME_TIME_TOTAL).unwrap();
+                    let frame_time_diff = stats.get(&debug_stat::FRAME_TIME_DIFF).unwrap();
+
+                    x = draw_text_at(
+                        overlay_ptr,
+                        format!("Custom render: {}ns.  ", frame_time_custom),
+                        x,
+                        y,
+                    );
+
+                    x = draw_text_at(
+                        overlay_ptr,
+                        format!("Total render: {}ns.  ", frame_time_total),
+                        x,
+                        y,
+                    );
+
+                    x = draw_text_at(
+                        overlay_ptr,
+                        format!("Original: {}ns.  ", frame_time_diff),
+                        x,
+                        y,
+                    );
+                }
+            }
+            _ => {}
         }
     }
+}
+
+fn draw_text_at(buf: *mut u8, str: String, x: f32, y: f32) -> f32 {
+    let mut x = x;
+    for c in str.chars() {
+        if x + FONT_SIZE >= MAX_X {
+            //Overflow
+            break;
+        }
+        unsafe {
+            x = draw_char(buf, x, y, c);
+        }
+    }
+    x
 }
 
 fn clear_log_area(buf: *mut u8) {

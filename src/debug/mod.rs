@@ -16,6 +16,7 @@ use windows::Win32::{
 };
 
 pub mod debug_overlay;
+pub mod statistics;
 
 //Anything related to debugging should be added here, then toggled with a keybind.
 pub struct DebugFeatures {

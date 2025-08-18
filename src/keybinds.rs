@@ -10,7 +10,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_ME
 use crate::{
     debug::{
         DEBUG_FEATURES,
-        debug_overlay::{clear_debug_overlay, refresh_overlay_buffer},
+        debug_overlay::{OVERLAY_MODE, clear_debug_overlay, overlay_mode, refresh_overlay_buffer},
         dump_debug_data, restart_blish,
     },
     ui::FRAME_BUFFER,
@@ -48,6 +48,8 @@ fn dump_default_keybinds(path: &str) {
         ("Ctrl+Alt+B", "toggle_rendering"),
         ("Ctrl+Alt+N", "toggle_processing"),
         ("Ctrl+Alt+D", "toggle_debug_overlay"),
+        ("Ctrl+Alt+Shift+1", "debug_overlay_log_mode"),
+        ("Ctrl+Alt+Shift+2", "debug_overlay_statistics_mode"),
     ];
 
     for (combo, action) in defaults {
@@ -102,7 +104,6 @@ fn load_keybinds(path: &str) -> HashMap<KeyBind, fn()> {
     });
     map
 }
-
 fn action_from_name(name: &str) -> fn() {
     match name {
         "dump_debug_data" => dump_debug_data as fn(),
@@ -110,6 +111,8 @@ fn action_from_name(name: &str) -> fn() {
         "toggle_rendering" => toggle_rendering_action as fn(),
         "toggle_processing" => toggle_processing_action as fn(),
         "toggle_debug_overlay" => toggle_debug_overlay as fn(),
+        "debug_overlay_log_mode" => change_overlay_mode_to_log as fn(),
+        "debug_overlay_statistics_mode" => change_overlay_mode_to_statistics as fn(),
         _ => panic!("Unknown action: {}", name),
     }
 }
@@ -155,7 +158,16 @@ fn toggle_debug_overlay() {
             clear_debug_overlay(&mut frame.pixels, width);
         }
     } else {
-        refresh_overlay_buffer();
+        refresh_overlay_buffer(None);
     }
     log::info!("Debug overlay toggled.");
+}
+
+fn change_overlay_mode_to_log() {
+    OVERLAY_MODE.store(overlay_mode::LOG_MODE, Ordering::Relaxed);
+    refresh_overlay_buffer(None);
+}
+fn change_overlay_mode_to_statistics() {
+    OVERLAY_MODE.store(overlay_mode::STAT_MODE, Ordering::Relaxed);
+    refresh_overlay_buffer(None);
 }

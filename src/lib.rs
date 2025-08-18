@@ -1,7 +1,7 @@
 use address_finder::AddressFinder;
 use chrono::Local;
 use controls::{initialize_controls, start_mouse_input_thread};
-use debug::debug_overlay::add_to_debug_log_overlay;
+use debug::{debug_overlay::add_to_debug_log_overlay, statistics::start_statistics_server};
 use fern::Dispatch;
 use hooks::present_hook;
 use keybinds::init_keybinds;
@@ -92,6 +92,7 @@ fn attach(handle: HINSTANCE) {
 
         unsafe { HANDLE_NO = handle.0 as u64 };
 
+        start_statistics_server();
         init_keybinds();
         ui::startup_ui_rendering();
 

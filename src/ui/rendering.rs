@@ -1,4 +1,7 @@
-use std::sync::{Mutex, atomic::Ordering};
+use std::{
+    sync::{Mutex, atomic::Ordering},
+    time::Instant,
+};
 
 use windows::{
     Win32::{
@@ -25,7 +28,11 @@ use windows::{
 };
 
 use crate::{
-    debug::{DEBUG_FEATURES, debug_overlay::draw_debug_overlay},
+    debug::{
+        DEBUG_FEATURES,
+        debug_overlay::draw_debug_overlay,
+        statistics::{self, send_statistic},
+    },
     hooks::present_hook,
 };
 
@@ -78,6 +85,7 @@ impl OverlayState {
 
 ///This is our big present hook. Takes a the latest frame sent from Blish in FRAME_BUFFER.
 pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u32) -> HRESULT {
+    let start = Instant::now();
     //Macro to make it less ugly to return early.
     macro_rules! return_present {
         () => {
@@ -174,7 +182,20 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         ctx.IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx.Draw(3, 0);
 
-        present_hook.call(swapchain, sync_interval, flags)
+        //Stats
+        let frame_time_custom = start.elapsed().as_nanos() as u32;
+        send_statistic(statistics::debug_stat::FRAME_TIME_CUSTOM, frame_time_custom);
+
+        //Original present
+        let result = present_hook.call(swapchain, sync_interval, flags);
+
+        let frame_time_total = start.elapsed().as_nanos() as u32;
+        send_statistic(statistics::debug_stat::FRAME_TIME_TOTAL, frame_time_total);
+        send_statistic(
+            statistics::debug_stat::FRAME_TIME_DIFF,
+            frame_time_total - frame_time_custom,
+        );
+        return result;
     }
 }
 
@@ -252,7 +273,8 @@ fn copy_frame_into_map(
     let frame_lock = FRAME_BUFFER.get().unwrap();
     let mut frame = frame_lock.lock().unwrap();
 
-    //Draw the debug overlay if it's enabled
+    //Draw the debug overlay if it's enabled. It's rather slow, but we don't care
+    //since it's for debugging only anyway.
     if DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed) {
         draw_debug_overlay(&mut frame.pixels, width as u32);
     }
@@ -265,7 +287,6 @@ fn copy_frame_into_map(
             std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4);
         };
     }
-
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use address_finder::AddressFinder;
 use chrono::Local;
 use controls::{initialize_controls, start_mouse_input_thread};
+use debug::debug_overlay::add_to_debug_log_overlay;
 use fern::Dispatch;
 use hooks::present_hook;
 use keybinds::init_keybinds;
@@ -128,23 +129,25 @@ fn enable_logging() {
         .chain(file)
         .format(|out, message, record| {
             let now = Local::now();
-            if record.level() == log::Level::Error {
-                out.finish(format_args!(
+            let format = if record.level() == log::Level::Error {
+                format_args!(
                     "[{}] [external-dx11-overlay] [{}] [{}:{}] {}",
                     now.format("%Y-%m-%d %H:%M:%S"),
                     record.level(),
                     record.file().unwrap_or("<unknown>"),
                     record.line().unwrap_or(0),
                     message
-                ))
+                )
             } else {
-                out.finish(format_args!(
+                format_args!(
                     "[{}] [external-dx11-overlay] [{}] {}",
                     now.format("%Y-%m-%d %H:%M:%S"),
                     record.level(),
                     message
-                ))
-            }
+                )
+            };
+            add_to_debug_log_overlay(format.to_string());
+            out.finish(format);
         })
         .apply()
         .ok();
@@ -167,7 +170,6 @@ fn enable_logging() {
             .location()
             .map(|l| format!("{}:{}", l.file(), l.line()))
             .unwrap_or_else(|| "unknown location".to_string());
-
         log::error!("PANIC at {}: {}", location, payload);
     }));
 

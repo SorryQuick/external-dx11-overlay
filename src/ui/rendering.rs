@@ -24,7 +24,10 @@ use windows::{
     core::{Error, HRESULT},
 };
 
-use crate::{debug::DEBUG_FEATURES, hooks::present_hook};
+use crate::{
+    debug::{DEBUG_FEATURES, debug_overlay::draw_debug_overlay},
+    hooks::present_hook,
+};
 
 use super::{FRAME_BUFFER, OVERLAY_STATE};
 
@@ -247,14 +250,22 @@ fn copy_frame_into_map(
     mapped: &D3D11_MAPPED_SUBRESOURCE,
 ) -> Result<(), ()> {
     let frame_lock = FRAME_BUFFER.get().unwrap();
-    let frame = frame_lock.lock().unwrap();
+    let mut frame = frame_lock.lock().unwrap();
+
+    //Draw the debug overlay if it's enabled
+    if DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed) {
+        draw_debug_overlay(&mut frame.pixels, width as u32);
+    }
+
+    //Copy to GPU
     for y in 0..height as usize {
         unsafe {
             let src_row = frame.pixels.as_ptr().add(y * width as usize * 4);
             let dst_row = (mapped.pData as *mut u8).add(y * mapped.RowPitch as usize);
-            std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4)
+            std::ptr::copy_nonoverlapping(src_row, dst_row, width as usize * 4);
         };
     }
+
     Ok(())
 }
 

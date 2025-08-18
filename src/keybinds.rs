@@ -7,7 +7,14 @@ use std::{
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU, VK_SHIFT};
 
-use crate::debug::{DEBUG_FEATURES, dump_debug_data, restart_blish};
+use crate::{
+    debug::{
+        DEBUG_FEATURES,
+        debug_overlay::{clear_debug_overlay, refresh_overlay_buffer},
+        dump_debug_data, restart_blish,
+    },
+    ui::FRAME_BUFFER,
+};
 
 //Handle keybinds and custom keybinds
 #[derive(Eq, Hash, PartialEq, Debug)]
@@ -40,6 +47,7 @@ fn dump_default_keybinds(path: &str) {
         ("Ctrl+Alt+O", "restart_blish"),
         ("Ctrl+Alt+B", "toggle_rendering"),
         ("Ctrl+Alt+N", "toggle_processing"),
+        ("Ctrl+Alt+D", "toggle_debug_overlay"),
     ];
 
     for (combo, action) in defaults {
@@ -101,6 +109,7 @@ fn action_from_name(name: &str) -> fn() {
         "restart_blish" => restart_blish as fn(),
         "toggle_rendering" => toggle_rendering_action as fn(),
         "toggle_processing" => toggle_processing_action as fn(),
+        "toggle_debug_overlay" => toggle_debug_overlay as fn(),
         _ => panic!("Unknown action: {}", name),
     }
 }
@@ -120,14 +129,33 @@ pub fn get_current_keybind(wparam: u32) -> KeyBind {
 }
 
 fn toggle_rendering_action() {
+    log::info!("Rendering toggled.");
     DEBUG_FEATURES.rendering_enabled.store(
         !DEBUG_FEATURES.rendering_enabled.load(Ordering::Relaxed),
         Ordering::Relaxed,
     );
 }
 fn toggle_processing_action() {
+    log::info!("Processing toggled.");
     DEBUG_FEATURES.processing_enabled.store(
         !DEBUG_FEATURES.processing_enabled.load(Ordering::Relaxed),
         Ordering::Relaxed,
     );
+}
+fn toggle_debug_overlay() {
+    let old = DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed);
+    DEBUG_FEATURES
+        .debug_overlay_enabled
+        .store(!old, Ordering::Relaxed);
+    //Need to clear the overlay
+    if old == true {
+        if let Some(buf) = FRAME_BUFFER.get() {
+            let mut frame = buf.lock().unwrap();
+            let width = frame.width;
+            clear_debug_overlay(&mut frame.pixels, width);
+        }
+    } else {
+        refresh_overlay_buffer();
+    }
+    log::info!("Debug overlay toggled.");
 }

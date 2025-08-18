@@ -1,3 +1,4 @@
+use crate::ui::{FRAME_BUFFER, OVERLAY_STATE};
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
@@ -14,17 +15,19 @@ use windows::Win32::{
     },
 };
 
-use crate::ui::{FRAME_BUFFER, OVERLAY_STATE};
+pub mod debug_overlay;
 
 //Anything related to debugging should be added here, then toggled with a keybind.
 pub struct DebugFeatures {
     pub rendering_enabled: AtomicBool,
     pub processing_enabled: AtomicBool,
+    pub debug_overlay_enabled: AtomicBool,
 }
 
 pub static DEBUG_FEATURES: DebugFeatures = DebugFeatures {
     rendering_enabled: AtomicBool::new(true),
     processing_enabled: AtomicBool::new(true),
+    debug_overlay_enabled: AtomicBool::new(false),
 };
 
 //Prints a bunch of debug info.

@@ -34,13 +34,25 @@ If you are using a Steam account instead of an ArenaNet one, you must add USE_ST
 
 ## Step 3 (No steam)
 This will depend on what you use (lutris, bottles, crossover, kegworks...). However, generally, you want to add a new game and point it to Gw2-Simple-Addon-loader.exe which you unzipped earlier. 
-You will then be very likely to need to perform step 5. A general troubleshoot step here is to start with a brand new wine prefix and then install dotnet48 to it (step 5). If you are on Mac, using DXMT is highly recommended.
+You will then be very likely to need to perform step 5. A general troubleshoot step here is to start with a **brand new wine prefix** and then install dotnet48 to it (step 5). If you are on Mac, using DXMT is highly recommended.
 
 ## Step 4
 Try launching this new steam shortcut. You should have to enter your credentials on the gw2 launcher again as steam created a new wine prefix for the new entry. A flicker is expected when launching the game. At that point, everything should work and BlishHUD should have loaded along with the game.
 
 ## Step 5 (optional/troubleshoot)
-Sometimes, BlishHUD may not load correctly due to dotnet48 not being installed in the prefix. This is even more likely if you created the prefix yourself, or are not using steam. To fix it:
+Sometimes, BlishHUD may not load correctly due to dotnet48 not being installed in the prefix or it conflicting with mono. This is even more likely if you created the prefix yourself, or are not using steam. 
+To fix it (wine will pop a bunch of warnings, this is normal):
+
+### Remove mono
+
+First, you may need to remove ```mono``` from your prefix.
+
+If using steam, simply run protontricks. Eg ```protontricks``` in a terminal. Then select your new: "Non-Steam shortcut: Gw2-Simple-Addon-Loader.exe.
+From here, "Chose the default prefix" -> "Ok" -> "Run uninstaller". Remove mono. 
+
+If you are **not** using steam, do the same thing, but instead of using protontricks, run ```WINEPREFIX=your_prefix winetricks```.
+
+### Add dotnet48
 
 If using steam, simply run protontricks. Eg ```protontricks``` in a terminal. Then select your new: "Non-Steam shortcut: Gw2-Simple-Addon-Loader.exe.
 From here, "Install an application" -> "Cancel" -> "Install a Windows DLL or component". From the list, choose "dotnet48" and follow the instructions.

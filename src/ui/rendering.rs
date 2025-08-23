@@ -306,7 +306,6 @@ fn copy_frame_into_map(
             std::ptr::copy_nonoverlapping(src, dst, width * 4);
         }
     }
-    println!("Took: {}ns", i1.elapsed().as_nanos());
     Ok(())
 }
 

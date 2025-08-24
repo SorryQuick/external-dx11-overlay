@@ -8,8 +8,6 @@ use std::{
 
 use fontdue::{Font, FontSettings};
 
-use crate::ui::FORCE_RENDER;
-
 use super::{DEBUG_FEATURES, statistics::debug_stat};
 
 //---------------------------------------- Debug Overlay ---------------------------------------
@@ -157,7 +155,6 @@ pub fn refresh_overlay_buffer(stats: Option<&HashMap<u32, u32>>) {
             _ => {}
         }
     }
-    FORCE_RENDER.store(true, Ordering::Relaxed);
 }
 
 fn draw_text_at(buf: *mut u8, str: String, x: f32, y: f32) -> f32 {

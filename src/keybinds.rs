@@ -7,13 +7,10 @@ use std::{
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_MENU, VK_SHIFT};
 
-use crate::{
-    debug::{
-        DEBUG_FEATURES,
-        debug_overlay::{OVERLAY_MODE, clear_debug_overlay, overlay_mode, refresh_overlay_buffer},
-        dump_debug_data, restart_blish,
-    },
-    ui::{FORCE_RENDER, FRAME_BUFFER},
+use crate::debug::{
+    DEBUG_FEATURES,
+    debug_overlay::{OVERLAY_MODE, overlay_mode, refresh_overlay_buffer},
+    dump_debug_data, restart_blish,
 };
 
 //Handle keybinds and custom keybinds
@@ -152,13 +149,12 @@ fn toggle_debug_overlay() {
         .store(!old, Ordering::Relaxed);
     //Need to clear the overlay
     if old == true {
-        if let Some(buf) = FRAME_BUFFER.get() {
+        /*if let Some(buf) = FRAME_BUFFER.get() {
             let mut frame = buf.lock().unwrap();
             let width = frame.width;
             clear_debug_overlay(&mut frame.pixels, width);
-        }
-
-        FORCE_RENDER.store(true, Ordering::Relaxed);
+        }*/
+        //TODO
     } else {
         refresh_overlay_buffer(None);
     }

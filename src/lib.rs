@@ -94,7 +94,6 @@ fn attach(handle: HINSTANCE) {
 
         start_statistics_server();
         init_keybinds();
-        ui::startup_ui_rendering();
 
         //MUST BE CALLED IN THIS ORDER
         start_mouse_input_thread();

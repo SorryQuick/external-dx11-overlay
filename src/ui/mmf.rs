@@ -7,6 +7,7 @@ use crate::globals::{self};
 use windows::{
     Win32::{
         Foundation::{BOOL, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        Graphics::Dxgi::IDXGISwapChain,
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEM_COMMIT, MEMORY_BASIC_INFORMATION,
@@ -23,12 +24,14 @@ use super::{HEADER_NAME, HEADER_SIZE, MMF_DATA, SHARED_HANDLE_HEADER, rendering:
 
 #[derive(Debug)]
 pub struct MMFData {
+    header: Option<MEMORY_MAPPED_VIEW_ADDRESS>,
     pub width: u32,
     pub height: u32,
     pub index: u32,
     pub addr1: u64,
     pub addr2: u64,
 }
+unsafe impl Send for MMFData {}
 impl MMFData {
     pub fn get_current_addr(&self) -> u64 {
         if self.index == 0 {
@@ -39,15 +42,11 @@ impl MMFData {
     }
 }
 
-pub fn read_mmf_data(state: &mut OverlayState) {
-    let mut header: Option<MEMORY_MAPPED_VIEW_ADDRESS> = None;
-    if header.is_none() {
-        header = open_header_mmf().ok();
-    }
-
+pub fn read_mmf_data() {
     if MMF_DATA.get().is_none() {
         MMF_DATA
             .set(Mutex::new(MMFData {
+                header: None,
                 width: 0,
                 height: 0,
                 index: 0,
@@ -56,10 +55,12 @@ pub fn read_mmf_data(state: &mut OverlayState) {
             }))
             .ok();
     }
+    let mut mmfdata = MMF_DATA.get().unwrap().lock().unwrap();
+    if mmfdata.header.is_none() {
+        mmfdata.header = open_header_mmf().ok();
+    }
 
-    if let Some(ptr) = header {
-        let mut mmfdata = MMF_DATA.get().unwrap().lock().unwrap();
-
+    if let Some(ptr) = mmfdata.header {
         let ptr = ptr.Value as *mut u8;
         let data = unsafe { from_raw_parts(ptr, HEADER_SIZE) };
 
@@ -68,8 +69,6 @@ pub fn read_mmf_data(state: &mut OverlayState) {
         mmfdata.index = u32::from_le_bytes(data[8..12].try_into().unwrap());
         mmfdata.addr1 = u64::from_le_bytes(data[12..20].try_into().unwrap());
         mmfdata.addr2 = u64::from_le_bytes(data[20..28].try_into().unwrap());
-
-        state.resize(mmfdata.width, mmfdata.height);
     }
 }
 

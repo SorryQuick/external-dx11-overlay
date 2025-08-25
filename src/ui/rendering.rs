@@ -17,7 +17,10 @@ use windows::{
                 ID3D11PixelShader, ID3D11RenderTargetView, ID3D11SamplerState,
                 ID3D11ShaderResourceView, ID3D11Texture2D, ID3D11VertexShader,
             },
-            Dxgi::{Common::DXGI_FORMAT_R8G8B8A8_UNORM, IDXGISwapChain},
+            Dxgi::{
+                Common::{DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC},
+                DXGI_SWAP_CHAIN_DESC, IDXGISwapChain,
+            },
         },
     },
     core::{Error, HRESULT},
@@ -57,27 +60,23 @@ pub struct OverlayState {
 }
 
 impl OverlayState {
-    pub fn resize(&mut self, new_width: u32, new_height: u32) {
+    pub fn resize(&mut self, swapchain: &IDXGISwapChain) {
+        let mut desc = DXGI_SWAP_CHAIN_DESC::default();
+        unsafe {
+            swapchain.GetDesc(&mut desc);
+        }
         self.viewport = D3D11_VIEWPORT {
             TopLeftX: 0.0,
             TopLeftY: 0.0,
-            Width: new_width as f32,
-            Height: new_height as f32,
+            Width: desc.BufferDesc.Width as f32,
+            Height: desc.BufferDesc.Height as f32,
             MinDepth: 0.0,
             MaxDepth: 1.0,
         };
-        self.width = new_width;
-        self.height = new_height;
+        self.width = desc.BufferDesc.Width;
+        self.height = desc.BufferDesc.Height;
 
-        if let Some(texture) = &self.overlay_texture {
-            let mut rtv: Option<ID3D11RenderTargetView> = None;
-            unsafe {
-                self.device
-                    .CreateRenderTargetView(texture, Some(std::ptr::null()), Some(&mut rtv))
-                    .ok()
-            };
-            self.render_target_view = rtv;
-        }
+        self.render_target_view = create_render_target_view(swapchain, &self.device);
     }
 }
 
@@ -113,9 +112,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
         let mut state = lock.as_mut().unwrap();
 
-        if state.height == 0 || state.width == 0 {
-            read_mmf_data(&mut state);
-        }
+        read_mmf_data();
 
         {
             let mmfdata = MMF_DATA.get().unwrap().lock().unwrap();
@@ -124,29 +121,27 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
                 return_present!();
             }
 
-            if state.overlay_texture.is_none() {
-                update_texture(&mut state, ptr);
+            //Resize
+            if state.height != mmfdata.height || state.width != mmfdata.width {
+                state.resize(&swapchain);
             }
 
-            if state.height != mmfdata.height || state.width != mmfdata.width {
-                state.height = mmfdata.height;
-                state.width = mmfdata.width;
-                drop(mmfdata);
-                read_mmf_data(&mut state);
-                update_texture(&mut state, ptr);
+            if update_texture(&mut state, ptr).is_err() {
+                log::error!("Update texture failed");
+                return_present!();
             }
         }
 
         let ctx = &state.context;
+
+        //Viewport
+        ctx.RSSetViewports(Some(&[state.viewport]));
 
         ctx.OMSetBlendState(&state.blend_state, Some(&state.blend_factor), 0xffffffff);
 
         if state.render_target_view.is_some() {
             ctx.OMSetRenderTargets(Some(&[state.render_target_view.clone()]), None);
         }
-
-        //Viewport
-        ctx.RSSetViewports(Some(&[state.viewport]));
 
         //Shaders
         ctx.VSSetShader(&state.vertex_shader, None);
@@ -181,15 +176,20 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 }
 
 //Updates the texture from the shared resource.
-fn update_texture(state: &mut OverlayState, texture_ptr: u64) {
+fn update_texture(state: &mut OverlayState, texture_ptr: u64) -> Result<(), ()> {
+    state.overlay_texture = None;
+    state.shader_resource_view = None;
     unsafe {
-        state
+        if state
             .device
             .OpenSharedResource(
                 HANDLE(texture_ptr as isize),
                 &mut state.overlay_texture as *mut _,
             )
-            .ok()
+            .is_err()
+        {
+            return Err(());
+        }
     };
     let tex = state.overlay_texture.as_ref().unwrap();
     let mut srv: Option<ID3D11ShaderResourceView> = None;
@@ -201,12 +201,16 @@ fn update_texture(state: &mut OverlayState, texture_ptr: u64) {
     };
 
     unsafe {
-        state
+        if state
             .device
             .CreateShaderResourceView(tex, Some(&desc), Some(&mut srv))
-            .ok();
+            .is_err()
+        {
+            return Err(());
+        }
     }
     state.shader_resource_view = srv;
+    Ok(())
 }
 
 fn get_device_and_context(
@@ -244,7 +248,7 @@ fn initialize_overlay_state(swapchain: &IDXGISwapChain) {
             MinDepth: 0.0,
             MaxDepth: 1.0,
         },
-        render_target_view: None,
+        render_target_view: create_render_target_view(swapchain, &device),
         blend_factor: [0.0f32, 0.0f32, 0.0f32, 0.0f32],
     };
     let overlay_state = OVERLAY_STATE.get_or_init(|| Mutex::new(None));
@@ -253,6 +257,25 @@ fn initialize_overlay_state(swapchain: &IDXGISwapChain) {
     } else {
         log::error!("Poisoned OVERLAY_STATE mutex.");
     }
+}
+
+pub fn create_render_target_view(
+    swapchain: &IDXGISwapChain,
+    device: &ID3D11Device,
+) -> Option<ID3D11RenderTargetView> {
+    unsafe {
+        let backbuffer: Result<ID3D11Texture2D, _> = swapchain.GetBuffer(0);
+        if let Ok(buffer) = backbuffer {
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            if device
+                .CreateRenderTargetView(&buffer, None, Some(&mut rtv))
+                .is_ok()
+            {
+                return rtv;
+            }
+        }
+    }
+    None
 }
 
 ///Creates the vertex shader to be used to display the overlay. Will be reused forever.

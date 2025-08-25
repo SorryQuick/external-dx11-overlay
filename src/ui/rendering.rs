@@ -156,7 +156,7 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
             if update_texture(&mut state, ptr).is_err() {
                 //The other side was probably closed, so just cleanup and wait until it's back up
                 //When it is, read_mmf_data() will stop returning err.
-                log::error!("Update texture failed. Blish might have been closed.");
+                //log::error!("Update texture failed. Blish might have been closed.");
                 state.context.PSSetShaderResources(0, Some(&[None]));
                 drop(mmfdata);
                 cleanup_shutdown();

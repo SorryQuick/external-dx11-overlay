@@ -84,14 +84,6 @@ pub fn read_mmf_data() -> Result<(), ()> {
         mmfdata.index = u32::from_le_bytes(data[8..12].try_into().unwrap());
         mmfdata.addr1 = u64::from_le_bytes(data[12..20].try_into().unwrap());
         mmfdata.addr2 = u64::from_le_bytes(data[20..28].try_into().unwrap());
-
-        log::debug!(
-            "We are getting mmfdata: {}, {}, {}, {}",
-            mmfdata.width,
-            mmfdata.height,
-            mmfdata.addr1,
-            mmfdata.addr2,
-        );
     }
     Ok(())
 }

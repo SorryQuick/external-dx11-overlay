@@ -1,20 +1,24 @@
 use std::{
-    ffi::OsStr, os::windows::ffi::OsStrExt, ptr::write_unaligned, slice::from_raw_parts,
+    ffi::OsStr,
+    os::windows::ffi::OsStrExt,
+    ptr::{null_mut, write_unaligned},
+    slice::from_raw_parts,
     sync::Mutex,
+    time::Duration,
 };
 
 use crate::globals::{self};
 use windows::{
     Win32::{
-        Foundation::{BOOL, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        Foundation::{BOOL, CloseHandle, HANDLE, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT},
         Graphics::Dxgi::IDXGISwapChain,
         System::{
             Memory::{
                 FILE_MAP_ALL_ACCESS, MEM_COMMIT, MEMORY_BASIC_INFORMATION,
                 MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW, PAGE_NOACCESS,
-                VirtualQuery,
+                UnmapViewOfFile, VirtualQuery,
             },
-            Threading::{self, CreateEventW, OpenMutexW, WaitForSingleObject},
+            Threading::{self, CreateEventW, MUTEX_ALL_ACCESS, OpenMutexW, WaitForSingleObject},
         },
     },
     core::PCWSTR,
@@ -25,6 +29,7 @@ use super::{HEADER_NAME, HEADER_SIZE, MMF_DATA, SHARED_HANDLE_HEADER, rendering:
 #[derive(Debug)]
 pub struct MMFData {
     header: Option<MEMORY_MAPPED_VIEW_ADDRESS>,
+    file_mapping: Option<HANDLE>,
     pub width: u32,
     pub height: u32,
     pub index: u32,
@@ -42,11 +47,12 @@ impl MMFData {
     }
 }
 
-pub fn read_mmf_data() {
+pub fn read_mmf_data() -> Result<(), ()> {
     if MMF_DATA.get().is_none() {
         MMF_DATA
             .set(Mutex::new(MMFData {
                 header: None,
+                file_mapping: None,
                 width: 0,
                 height: 0,
                 index: 0,
@@ -57,9 +63,18 @@ pub fn read_mmf_data() {
     }
     let mut mmfdata = MMF_DATA.get().unwrap().lock().unwrap();
     if mmfdata.header.is_none() {
-        mmfdata.header = open_header_mmf().ok();
-    }
+        if !is_blish_alive() {
+            //This is fine, if blish is not open we just get out asap and rendering will not
+            //proceed. For some reason, the MMF can still be "valid" even if blish was killed.
+            return Err(());
+        }
 
+        if let Ok(header) = open_header_mmf(&mut mmfdata) {
+            mmfdata.header = Some(header);
+        } else {
+            return Err(());
+        }
+    }
     if let Some(ptr) = mmfdata.header {
         let ptr = ptr.Value as *mut u8;
         let data = unsafe { from_raw_parts(ptr, HEADER_SIZE) };
@@ -69,7 +84,16 @@ pub fn read_mmf_data() {
         mmfdata.index = u32::from_le_bytes(data[8..12].try_into().unwrap());
         mmfdata.addr1 = u64::from_le_bytes(data[12..20].try_into().unwrap());
         mmfdata.addr2 = u64::from_le_bytes(data[20..28].try_into().unwrap());
+
+        log::debug!(
+            "We are getting mmfdata: {}, {}, {}, {}",
+            mmfdata.width,
+            mmfdata.height,
+            mmfdata.addr1,
+            mmfdata.addr2,
+        );
     }
+    Ok(())
 }
 
 /// Quick utility to ensure the header is valid.
@@ -104,92 +128,75 @@ unsafe fn is_pointer_valid(ptr: *const u8, len: usize) -> bool {
     }
 }
 
-/// Quick utility to make the header invalid should Blish have closed down early.
-fn make_header_invalid(header: MEMORY_MAPPED_VIEW_ADDRESS) {
-    unsafe {
-        let ptr = header.Value as *mut u8;
-        write_unaligned(ptr as *mut u32, 0);
-        write_unaligned(ptr.add(4) as *mut u32, 0);
-    }
-}
-
-fn init_events() -> (HANDLE, HANDLE) {
-    let frame_ready_name: Vec<u16> = "BlishHUD_FrameReady\0".encode_utf16().collect();
-    let frame_consumed_name: Vec<u16> = "BlishHUD_FrameConsumed\0".encode_utf16().collect();
-    let frame_ready = unsafe {
-        CreateEventW(None, true, false, PCWSTR(frame_ready_name.as_ptr()))
-            .expect("Could not open frame ready event.")
-    };
-    let frame_consumed = unsafe {
-        CreateEventW(None, true, true, PCWSTR(frame_consumed_name.as_ptr()))
-            .expect("Could not open frame consumed event.")
-    };
-
-    if frame_ready.0 == 0 || frame_consumed.0 == 0 {
-        panic!("Could not initialize events.");
-    }
-    (frame_ready, frame_consumed)
-}
-
 //Simply pings the mutex in the blish fork, to check if it's still up and hasn't crashed.
-fn is_blish_alive() -> bool {
-    let handle = globals::LIVE_MUTEX.get_or_init(|| unsafe {
-        let name: Vec<u16> = "Global\\blish_isalive_mutex"
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
+pub fn is_blish_alive() -> bool {
+    let name: Vec<u16> = "Global\\blish_isalive_mutex"
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
 
-        OpenMutexW(
+    unsafe {
+        match OpenMutexW(
             Threading::SYNCHRONIZATION_ACCESS_RIGHTS(0x00100000),
             false,
             PCWSTR(name.as_ptr()),
-        )
-        .ok()
-    });
-
-    if let Some(h) = handle {
-        matches!(
-            unsafe { WaitForSingleObject(*h, 0) },
-            WAIT_OBJECT_0 | WAIT_TIMEOUT
-        )
-    } else {
-        false
+        ) {
+            Ok(handle) => {
+                CloseHandle(handle).ok();
+                true
+            }
+            Err(e) => {
+                let err = e.code().0 as u32;
+                match err {
+                    2 | 123 => false,
+                    5 => true,
+                    _ => false,
+                }
+            }
+        }
     }
 }
 
-fn open_header_mmf() -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
-    let handle = get_header_handle()?;
-    let header_ptr = unsafe { MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, HEADER_SIZE) };
-    if header_ptr.Value.is_null() {
-        log::error!("Could not read header info.");
-        Err(())
-    } else {
-        Ok(header_ptr)
+pub fn cleanup_shutdown() {
+    if let Some(mmfdata) = MMF_DATA.get() {
+        let mut mmfdata = mmfdata.lock().unwrap();
+        if let (Some(view), Some(handle)) = (mmfdata.header, mmfdata.file_mapping) {
+            unsafe {
+                std::ptr::write_bytes(view.Value, 0, HEADER_SIZE);
+            }
+        }
+        if let Some(view) = mmfdata.header.take() {
+            unsafe {
+                UnmapViewOfFile(view);
+            }
+        }
+        if let Some(hmap) = mmfdata.file_mapping.take() {
+            unsafe {
+                CloseHandle(hmap);
+            }
+        }
+        mmfdata.height = 0;
+        mmfdata.width = 0;
+        mmfdata.index = 0;
+        mmfdata.addr1 = 0;
+        mmfdata.addr2 = 0;
     }
 }
 
-fn get_header_handle() -> Result<HANDLE, ()> {
-    let lock = SHARED_HANDLE_HEADER.get_or_init(|| Mutex::new(HANDLE(0)));
-    let mut guard = lock.lock().unwrap();
-
-    if guard.0 != 0 {
-        return Ok(*guard);
-    }
-
-    if let Ok(h) = unsafe {
+fn open_header_mmf(mmfdata: &mut MMFData) -> Result<MEMORY_MAPPED_VIEW_ADDRESS, ()> {
+    unsafe {
         let wide_name: Vec<u16> = OsStr::new(HEADER_NAME)
             .encode_wide()
             .chain(std::iter::once(0))
             .collect();
-        OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, BOOL(0), PCWSTR(wide_name.as_ptr()))
-    } {
-        if h.0 != 0 {
-            *guard = h;
-        } else {
-            return Err(());
+        mmfdata.file_mapping =
+            OpenFileMappingW(FILE_MAP_ALL_ACCESS.0, BOOL(0), PCWSTR(wide_name.as_ptr())).ok();
+        if let Some(map) = mmfdata.file_mapping {
+            let view = MapViewOfFile(map, FILE_MAP_ALL_ACCESS, 0, 0, HEADER_SIZE);
+            if view.Value != null_mut() {
+                return Ok(view);
+            }
         }
-    } else {
-        return Err(());
+        Err(())
     }
-    Ok(*guard)
 }

@@ -32,7 +32,10 @@ use crate::{
         statistics::{self, send_statistic},
     },
     hooks::present_hook,
-    ui::{MMF_DATA, mmf::read_mmf_data},
+    ui::{
+        MMF_DATA,
+        mmf::{cleanup_shutdown, read_mmf_data},
+    },
 };
 
 use super::OVERLAY_STATE;
@@ -63,7 +66,7 @@ impl OverlayState {
     pub fn resize(&mut self, swapchain: &IDXGISwapChain) {
         let mut desc = DXGI_SWAP_CHAIN_DESC::default();
         unsafe {
-            swapchain.GetDesc(&mut desc);
+            swapchain.GetDesc(&mut desc).ok();
         }
         self.viewport = D3D11_VIEWPORT {
             TopLeftX: 0.0,
@@ -77,6 +80,25 @@ impl OverlayState {
         self.height = desc.BufferDesc.Height;
 
         self.render_target_view = create_render_target_view(swapchain, &self.device);
+    }
+    pub fn shutdown(&mut self) {
+        self.overlay_texture.take();
+        self.shader_resource_view.take();
+        self.render_target_view.take();
+
+        self.width = 0;
+        self.height = 0;
+
+        self.viewport = D3D11_VIEWPORT {
+            TopLeftX: 0.0,
+            TopLeftY: 0.0,
+            Width: 0.0,
+            Height: 0.0,
+            MinDepth: 0.0,
+            MaxDepth: 1.0,
+        };
+
+        self.blend_factor = [0.0; 4];
     }
 }
 
@@ -100,7 +122,11 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         //Check if we need to cache stuff over again
         let mut lock = OVERLAY_STATE.get().unwrap().lock().unwrap();
         let recreate = if let Some(state) = lock.as_ref() {
-            state.device.GetDeviceRemovedReason().is_err()
+            if state.width == 0 || state.height == 0 {
+                true
+            } else {
+                state.device.GetDeviceRemovedReason().is_err()
+            }
         } else {
             true
         };
@@ -112,8 +138,9 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
         let mut state = lock.as_mut().unwrap();
 
-        read_mmf_data();
-
+        if read_mmf_data().is_err() {
+            return_present!();
+        }
         {
             let mmfdata = MMF_DATA.get().unwrap().lock().unwrap();
             let ptr = mmfdata.get_current_addr();
@@ -127,7 +154,13 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
             }
 
             if update_texture(&mut state, ptr).is_err() {
-                log::error!("Update texture failed");
+                //The other side was probably closed, so just cleanup and wait until it's back up
+                //When it is, read_mmf_data() will stop returning err.
+                log::error!("Update texture failed. Blish might have been closed.");
+                state.context.PSSetShaderResources(0, Some(&[None]));
+                drop(mmfdata);
+                cleanup_shutdown();
+                state.shutdown();
                 return_present!();
             }
         }
@@ -177,17 +210,14 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
 
 //Updates the texture from the shared resource.
 fn update_texture(state: &mut OverlayState, texture_ptr: u64) -> Result<(), ()> {
-    state.overlay_texture = None;
-    state.shader_resource_view = None;
+    state.overlay_texture.take();
+    state.shader_resource_view.take();
     unsafe {
-        if state
-            .device
-            .OpenSharedResource(
-                HANDLE(texture_ptr as isize),
-                &mut state.overlay_texture as *mut _,
-            )
-            .is_err()
-        {
+        if let Err(e) = state.device.OpenSharedResource(
+            HANDLE(texture_ptr as isize),
+            &mut state.overlay_texture as *mut _,
+        ) {
+            log::error!("{}", e.to_string());
             return Err(());
         }
     };
@@ -201,11 +231,11 @@ fn update_texture(state: &mut OverlayState, texture_ptr: u64) -> Result<(), ()> 
     };
 
     unsafe {
-        if state
+        if let Err(e) = state
             .device
             .CreateShaderResourceView(tex, Some(&desc), Some(&mut srv))
-            .is_err()
         {
+            log::error!("{}", e.to_string());
             return Err(());
         }
     }

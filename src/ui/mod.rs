@@ -1,6 +1,9 @@
-use std::sync::{Mutex, OnceLock};
+use std::{
+    sync::{Mutex, OnceLock},
+    time::Duration,
+};
 
-use mmf::MMFData;
+use mmf::{MMFData, cleanup_shutdown, is_blish_alive};
 use rendering::{OverlayState, detoured_present};
 use windows::{
     Win32::{Foundation::HANDLE, Graphics::Dxgi::IDXGISwapChain},

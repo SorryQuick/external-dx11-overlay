@@ -10,6 +10,7 @@ use std::{
     mem,
     path::PathBuf,
 };
+use ui::mmf::start_mmf_thread;
 use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
     Foundation::HINSTANCE,
@@ -55,6 +56,10 @@ fn attach(handle: HINSTANCE) {
     std::thread::spawn(move || {
         log::info!("Attaching to process");
         enable_logging();
+
+        //Do this early
+        start_mmf_thread();
+
         let (base, size) = get_base_addr_and_size();
         let mainwindow_hwnd = get_mainwindow_hwnd().expect("Could not get the game's window.");
 

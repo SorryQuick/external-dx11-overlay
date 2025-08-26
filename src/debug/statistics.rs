@@ -39,6 +39,18 @@ pub fn start_statistics_server() {
             match msg.0 {
                 _ => {
                     stats.insert(msg.0, msg.1);
+                    /*log::debug!(
+                        "Custom time: {}",
+                        stats.get(&debug_stat::FRAME_TIME_CUSTOM).unwrap()
+                    );
+                    log::debug!(
+                        "Total time: {}",
+                        stats.get(&debug_stat::FRAME_TIME_TOTAL).unwrap()
+                    );
+                    log::debug!(
+                        "Diff time: {}",
+                        stats.get(&debug_stat::FRAME_TIME_DIFF).unwrap()
+                    );*/
                 }
             }
             if last_refresh.elapsed() >= refresh_interval

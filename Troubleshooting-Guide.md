@@ -60,7 +60,7 @@ From there, open an issue on github or ask for help on the blishhud discord. Mak
 - If for whatever reason Blish asks you for an update, do **NOT** update it. For now, the only way to update it is to download a new release from this repo. Modules themselves may still be updated freely.
 - If you are using the Event Table module, it needs a specific version that works with WINE, you cannot use the normal one.
 - Issues installing dotnet48. First, make sure this is required to begin with, it usually is not. If it tells you it's already installed or a more recent version exists but it still does not work, try making a new prefix and installing dotnet48 into that fresh one. If you get error messages related to 32/64 bits, this is normal, just ignore.
-
+- Crash when launching Blish due to Shared Textures not being supported. To solve, simply use DXVK (not DXMT and others) version 1.10.1 or more recent.
 
 ## Known issues
 These are some known issues that are being worked on. This **may be outdated**. For more information, look at the issues page.

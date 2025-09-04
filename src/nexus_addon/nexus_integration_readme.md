@@ -50,5 +50,5 @@ You can tick the checkbox to make it launch on startup
 
 ### Known issues
 
-- Doesn't really work with windowed mode. Often creates a black screen with the nexus UI flickering. (tested on Windows only)
-- Weird scaling issue on fullscreen-windowed mode. The game and overlay works but sometimes the game can get stretched outside the screen and the event listener areas (where you click) are offset from where the actual UI is. (tested only on Windows)
+- Doesn't really work with windowed mode. Often creates a black screen with the nexus UI flickering. (tested on Windows only, not tested on linux yet)
+- **WINDOWS-ONLY ISSUE** : Weird scaling issue on fullscreen-windowed mode. The game and overlay works but sometimes the game can get stretched outside the screen and the event listener areas (where you click) are offset from where the actual UI is.

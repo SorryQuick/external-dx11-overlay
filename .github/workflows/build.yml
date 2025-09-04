@@ -10,12 +10,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
         with:
+          # on linux, it seems Nexus only recognizes the dll built with msvc
           targets: x86_64-pc-windows-msvc
-      - run: cargo +nightly build --release --features nexus
+      - run: cargo build --release --features nexus
       - uses: actions/upload-artifact@v4
         with:
           name: blishHUD overlay loader
           path: |
-            target/release/nexus_blishhud_overlay_loader.dll
+            target/x86_64-pc-windows-msvc/release/nexus_blishhud_overlay_loader.dll

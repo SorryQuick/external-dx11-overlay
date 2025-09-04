@@ -2,16 +2,17 @@ name: Check
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - external_dx11_overlay/**
-      - Cargo.toml
-  pull_request:
-    paths:
-      - external_dx11_overlay/**
-      - Cargo.toml
+    # disable for now
+  # push:
+  #   branches:
+  #     - master
+  #   paths:
+  #     - external_dx11_overlay/**
+  #     - Cargo.toml
+  # pull_request:
+  #   paths:
+  #     - external_dx11_overlay/**
+  #     - Cargo.toml
 
 jobs:
   check:

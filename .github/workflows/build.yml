@@ -13,7 +13,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
-      - run: cargo build --release --features nexus
+      - run: cargo +nightly build --release --features nexus
       - uses: actions/upload-artifact@v4
         with:
           name: blishHUD overlay loader

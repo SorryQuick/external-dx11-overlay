@@ -18,4 +18,4 @@ jobs:
         with:
           name: blishHUD overlay loader
           path: |
-            target/release/blishud_overlay_loader.dll
+            target/release/nexus_blishhud_overlay_loader.dll

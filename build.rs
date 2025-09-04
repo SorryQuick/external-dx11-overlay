@@ -19,9 +19,9 @@ fn main() {
     let dll_name = format!("{}.dll", lib_name);
     let src_path = target_dir.join(&dll_name);
 
-    // rename dll to blishud_overlay_loader to differentiate the 2
+    // rename dll to nexus_blishud_overlay_loader to differentiate the 2
     if feature_enabled("nexus") {
-        let new_name = format!("blishud_overlay_loader.dll");
+        let new_name = format!("nexus_blishhud_overlay_loader.dll");
         let dst_path = target_dir.join(&new_name);
 
         // Try to copy (or rename) output DLL

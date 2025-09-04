@@ -13,9 +13,9 @@ There are four steps to make this work.
 - Compile a forked version of BlishHUD from https://github.com/SorryQuick/Blish-HUD
 - If you are on Linux/Mac, you need to somehow get BlishHUD launched into your wine prefix. A quick way to do this (which probably won't work with steam) is to run something like this:
   ``WINEFSYNC=1 WINEPREFIX=<prefix> <wine binary> "Blish HUD.exe"``. With the same prefix and wine binary you used to launch the game (eg proton's wine binary).
-- You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Alternatively, you can install the nexus version of this addon and it will all be managed automatically. Eventually, this could support other existing loaders like arcdps. I've been using https://github.com/SorryQuick/Gw2-Simple-Addon-Loader
+- You need to load this DLL into the game's process. It will react well with any LoadLibraryW loader. You can also just google or search github for any dll injector out there and run it in the same prefix just like Blish. Eventually, this could support other existing loaders like arcdps. I've been using https://github.com/SorryQuick/Gw2-Simple-Addon-Loader
+  Alternatively, you can install the [nexus version](#nexus-integration) of this addon and it will all be managed automatically. You can download the [Nexus addon loader &amp; manager here](https://raidcore.gg/Nexus).
 - Texture Sharing must be enabled. Usually this means with proton and a recent version of DXVK.
-
 
 # Compiling
 

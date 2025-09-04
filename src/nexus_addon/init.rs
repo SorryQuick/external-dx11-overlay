@@ -70,7 +70,7 @@ fn initialize_nexus_addon() -> Result<()> {
     // Create the addon dir if it doesn't exist
     use std::fs;
 
-    let addon_dir = get_addon_dir("Blish HUD overlay loader").ok_or_else(|| {
+    let addon_dir = get_addon_dir("LOADER_public").ok_or_else(|| {
         NexusError::ManagerInitialization("Failed to get addon directory".to_string())
     })?;
 

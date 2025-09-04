@@ -1,2 +1,4 @@
 [build]
-target = "x86_64-pc-windows-gnu"
+# target = "x86_64-pc-windows-gnu"
+# somehow only works on my steamos using mvsc, but on windows it works both ways
+target = "x86_64-pc-windows-msvc"

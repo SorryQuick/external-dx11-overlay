@@ -1,10 +1,19 @@
 [package]
-name = "external-dx11-overlay"
-version = "0.1.0"
+name = "external_dx11_overlay"
+version = "0.2.0"
 edition = "2024"
+authors = ["SorryQuick", "Deathmore.3741"]
+description = "External DX11 Overlay"
+repository = "https://github.com/SorryQuick/external-dx11-overlay"
 
 [lib]
+name = "external_dx11_overlay"
+path = "src/lib.rs"
 crate-type = ["cdylib"]
+
+[features]
+default =[]
+nexus = []
 
 [dependencies]
 retour = { version="0.3.1", features=["static-detour"]}
@@ -12,6 +21,8 @@ log = "0.4"
 fern = "0.7"
 chrono = "*"
 fontdue = "*"
+nexus = { git = "https://github.com/zerthox/nexus-rs", features = ["log", "log_filter"] }
+rfd = "0.15"
 
 [dependencies.windows]
 version = "0.56"
@@ -43,4 +54,4 @@ opt-level = 'z'
 lto = true
 codegen-units = 1
 panic = 'abort'
-strip = true 
+strip = true

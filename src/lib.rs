@@ -20,6 +20,9 @@ use windows::Win32::{
     },
 };
 
+#[cfg(feature = "nexus")]
+use nexus::{self, AddonFlags};
+
 pub mod address_finder;
 pub mod controls;
 pub mod debug;
@@ -28,6 +31,7 @@ pub mod hooks;
 pub mod keybinds;
 pub mod ui;
 pub mod utils;
+pub mod nexus_addon;
 
 static mut HANDLE_NO: u64 = 0;
 
@@ -39,6 +43,7 @@ static mut HANDLE_NO: u64 = 0;
  * TODO: detatch() is poorly tested. It also definitely lacks some unloading stuff, like wnd_proc
  *
  * */
+ #[cfg(not(feature = "nexus"))]
 #[unsafe(no_mangle)]
 #[allow(unused_variables)]
 extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) -> bool {
@@ -181,4 +186,18 @@ fn enable_logging() {
     log::info!(
         "---------------------------------------- New Session ----------------------------------------------"
     );
+}
+
+
+// ======= Nexus export - only compiled when building for nexus =============
+#[cfg(feature = "nexus")]
+nexus::export! {
+    name: "Blish HUD overlay loader",
+    signature: -0x7A8B9C2D,
+    load: nexus_addon::nexus_load,
+    unload: nexus_addon::nexus_unload,
+    flags: AddonFlags::None,
+    provider: nexus::UpdateProvider::GitHub,
+    update_link: "https://github.com/SorryQuick/external-dx11-overlay",
+    log_filter: "trace"
 }

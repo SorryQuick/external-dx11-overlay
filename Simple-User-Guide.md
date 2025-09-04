@@ -16,7 +16,8 @@ This can also be used on windows, albeit with less advantages. For example, it c
 ## Step 1
 
 Go to the [release section](https://github.com/SorryQuick/external-dx11-overlay/releases) of this repository and download the latest release zip file (not the source code).
-`<img width="1371" height="578" alt="image" src="https://github.com/user-attachments/assets/69b84fd4-15ef-4112-b9ff-24a3a8c666b9" />`
+<img width="1371" height="578" alt="image" src="https://github.com/user-attachments/assets/8aa44e13-3e2f-4697-ae90-95a113f632a6" />
+
 
 ## Step 2
 
@@ -26,7 +27,7 @@ Eg. /home/user/.steam/steam/steamapps/common/Guild Wars 2/addons
 ## Step 3 (Using Steam)
 
 Go to your steam library and click add non-steam game.
-`<img width="361" height="121" alt="image" src="https://github.com/user-attachments/assets/487a71bb-ef29-4f04-8f4b-1847f9f72ddd" />`
+<img width="361" height="121" alt="image" src="https://github.com/user-attachments/assets/487a71bb-ef29-4f04-8f4b-1847f9f72ddd" />
 
 Under Browse, select "Gw2-Simple-Addon-Loader.exe, which can be found inside the addons folder you copied earlier. The click Add Selected Program.
 

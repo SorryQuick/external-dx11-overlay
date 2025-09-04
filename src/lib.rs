@@ -15,10 +15,11 @@ use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
     Foundation::HINSTANCE,
     System::{
-        LibraryLoader::FreeLibraryAndExitThread,
-        SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
+        LibraryLoader::FreeLibraryAndExitThread
     },
 };
+#[cfg(not(feature = "nexus"))]
+use windows::Win32::System::SystemServices::{DLL_PROCESS_DETACH, DLL_PROCESS_ATTACH};
 
 #[cfg(feature = "nexus")]
 use nexus::{self, AddonFlags};
@@ -65,12 +66,10 @@ fn attach(handle: HINSTANCE) {
         enable_logging();
 
         //Do this early - only needed for external overlay functionality
-        // #[cfg(not(feature = "nexus"))]
         start_mmf_thread();
 
         let (base, size) = get_base_addr_and_size();
 
-        // #[cfg(not(feature = "nexus"))]
         let mainwindow_hwnd = get_mainwindow_hwnd().expect("Could not get the game's window.");
 
         if base == 0 || size == 0 {
@@ -87,10 +86,6 @@ fn attach(handle: HINSTANCE) {
             module_size: size,
         };
 
-        // Only set up Present hook if not running under Nexus
-        // Nexus handles its own rendering and ImGui integration
-        // #[cfg(not(feature = "nexus"))]
-        {
             let present_addr = address_finder.find_addr_present();
 
             if present_addr == 0 {
@@ -108,17 +103,8 @@ fn attach(handle: HINSTANCE) {
                     .enable()
                     .unwrap();
             }
-        }
-
-        #[cfg(feature = "nexus")]
-        {
-            log::info!("Skipping Present hook setup - using Nexus rendering integration");
-        }
 
         unsafe { HANDLE_NO = handle.0 as u64 };
-
-        // These components are only needed for standalone mode, not when using Nexus
-        // #[cfg(not(feature = "nexus"))]
 
             start_statistics_server();
             init_keybinds();
@@ -127,17 +113,11 @@ fn attach(handle: HINSTANCE) {
             start_mouse_input_thread();
             initialize_controls(mainwindow_hwnd);
 
-
-        #[cfg(feature = "nexus")]
-        {
-            log::info!("Skipping standalone input/keybind setup - using Nexus integration");
-        }
     });
 }
 
 fn detatch() {
     log::info!("Detatching from process");
-    // #[cfg(not(feature = "nexus"))]
     unsafe {
         present_hook.disable().unwrap();
     }

@@ -1,7 +1,7 @@
 /*!
 # Nexus Addon Initialization Module
 
-Handles initialization, resource loading, and cleanup for the Nexus Guild Wars 2 overlay addon.
+Handles initialization, resource loading, and cleanup for the Nexus addon.
 Provides the main entry points for the addon lifecycle and orchestrates setup of UI, keybinds, quick access, and textures.
 
 ## Usage
@@ -86,6 +86,18 @@ fn initialize_nexus_addon() -> Result<()> {
         .map_err(|_| {
             NexusError::ManagerInitialization("Failed to set global exe manager".to_string())
         })?;
+
+    // Launch exe on startup if enabled
+    {
+        let mut manager = exe_manager.lock().map_err(|e| {
+            NexusError::ManagerInitialization(format!("Failed to lock exe manager: {e}"))
+        })?;
+        if *manager.launch_on_startup() {
+            if let Err(e) = manager.launch_exe() {
+                log::error!("Failed to launch exe on startup: {e}");
+            }
+        }
+    }
 
     // Load textures for the addon
     load_addon_textures()?;

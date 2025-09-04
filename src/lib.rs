@@ -23,6 +23,9 @@ use windows::Win32::{
 #[cfg(feature = "nexus")]
 use nexus::{self, AddonFlags};
 
+#[cfg(feature = "nexus")]
+pub mod nexus_addon;
+
 pub mod address_finder;
 pub mod controls;
 pub mod debug;
@@ -31,7 +34,6 @@ pub mod hooks;
 pub mod keybinds;
 pub mod ui;
 pub mod utils;
-pub mod nexus_addon;
 
 static mut HANDLE_NO: u64 = 0;
 
@@ -43,7 +45,7 @@ static mut HANDLE_NO: u64 = 0;
  * TODO: detatch() is poorly tested. It also definitely lacks some unloading stuff, like wnd_proc
  *
  * */
- #[cfg(not(feature = "nexus"))]
+#[cfg(not(feature = "nexus"))]
 #[unsafe(no_mangle)]
 #[allow(unused_variables)]
 extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) -> bool {
@@ -62,10 +64,13 @@ fn attach(handle: HINSTANCE) {
         log::info!("Attaching to process");
         enable_logging();
 
-        //Do this early
+        //Do this early - only needed for external overlay functionality
+        // #[cfg(not(feature = "nexus"))]
         start_mmf_thread();
 
         let (base, size) = get_base_addr_and_size();
+
+        // #[cfg(not(feature = "nexus"))]
         let mainwindow_hwnd = get_mainwindow_hwnd().expect("Could not get the game's window.");
 
         if base == 0 || size == 0 {
@@ -82,47 +87,69 @@ fn attach(handle: HINSTANCE) {
             module_size: size,
         };
 
-        let present_addr = address_finder.find_addr_present();
+        // Only set up Present hook if not running under Nexus
+        // Nexus handles its own rendering and ImGui integration
+        // #[cfg(not(feature = "nexus"))]
+        {
+            let present_addr = address_finder.find_addr_present();
 
-        if present_addr == 0 {
-            log::error!("Could not find the address of DirectX11 Present.");
-            unsafe { FreeLibraryAndExitThread(HINSTANCE { 0: handle.0 }, 0) };
+            if present_addr == 0 {
+                log::error!("Could not find the address of DirectX11 Present.");
+                unsafe { FreeLibraryAndExitThread(HINSTANCE { 0: handle.0 }, 0) };
+            }
+
+            unsafe {
+                present_hook
+                    .initialize(
+                        mem::transmute(present_addr as *const ()),
+                        ui::get_detoured_present(),
+                    )
+                    .unwrap()
+                    .enable()
+                    .unwrap();
+            }
         }
 
-        unsafe {
-            present_hook
-                .initialize(
-                    mem::transmute(present_addr as *const ()),
-                    ui::get_detoured_present(),
-                )
-                .unwrap()
-                .enable()
-                .unwrap();
+        #[cfg(feature = "nexus")]
+        {
+            log::info!("Skipping Present hook setup - using Nexus rendering integration");
         }
 
         unsafe { HANDLE_NO = handle.0 as u64 };
 
-        start_statistics_server();
-        init_keybinds();
+        // These components are only needed for standalone mode, not when using Nexus
+        // #[cfg(not(feature = "nexus"))]
 
-        //MUST BE CALLED IN THIS ORDER
-        start_mouse_input_thread();
-        initialize_controls(mainwindow_hwnd);
+            start_statistics_server();
+            init_keybinds();
+
+            //MUST BE CALLED IN THIS ORDER
+            start_mouse_input_thread();
+            initialize_controls(mainwindow_hwnd);
+
+
+        #[cfg(feature = "nexus")]
+        {
+            log::info!("Skipping standalone input/keybind setup - using Nexus integration");
+        }
     });
 }
 
 fn detatch() {
     log::info!("Detatching from process");
+    // #[cfg(not(feature = "nexus"))]
     unsafe {
         present_hook.disable().unwrap();
     }
 }
 fn enable_logging() {
     let file = {
+
         let logs_dir = PathBuf::from("addons/LOADER_public/logs");
+
         create_dir_all(&logs_dir).expect("Failed to create logs directory");
 
-        let filename = format!("dll-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+        let filename = format!("overlay-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
         let filepath = logs_dir.join(filename);
 
         OpenOptions::new()
@@ -187,7 +214,6 @@ fn enable_logging() {
         "---------------------------------------- New Session ----------------------------------------------"
     );
 }
-
 
 // ======= Nexus export - only compiled when building for nexus =============
 #[cfg(feature = "nexus")]

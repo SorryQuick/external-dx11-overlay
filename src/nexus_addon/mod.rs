@@ -1,28 +1,13 @@
 /*!
 # Nexus Addon Module
 
-This module serves as the central entry point for all Nexus-specific functionality in the Guild Wars 2 overlay addon.
-It organizes the codebase into logical submodules for executable management, UI rendering, and initialization/cleanup.
-
-## Usage
-
-Enable the `nexus` feature in your Cargo.toml to activate Nexus integration:
-
-```toml
-[features]
-nexus = []
-```
+This module serves as the central entry point for all Nexus-specific functionality.
 
 Import the main entry points for addon lifecycle management:
 
 ```rust
 use crate::nexus_addon::{nexus_load, nexus_unload};
 ```
-
-## Error Handling
-
-All errors across Nexus modules use the [`NexusError`](src/nexus_addon/mod.rs:9) enum for consistent propagation and logging.
-Use the provided `Result<T>` type alias for fallible operations.
 
 ## Modules
 

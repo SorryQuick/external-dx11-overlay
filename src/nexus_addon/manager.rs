@@ -1,7 +1,7 @@
 /*!
 # Executable Manager Module
 
-Handles all executable management functionality for the Nexus Guild Wars 2 addon, including:
+Handles all executable management functionality for the Nexus addon, including:
 - Persistent storage of executable paths
 - Launching and stopping processes
 - Process tracking and cleanup
@@ -52,6 +52,7 @@ pub struct ExeManager {
     exe_path: Option<String>,
     running_process: Option<Child>,
     addon_dir: PathBuf,
+    launch_on_startup: bool,
 }
 
 impl ExeManager {
@@ -69,6 +70,7 @@ impl ExeManager {
             exe_path: None,
             running_process: None,
             addon_dir,
+            launch_on_startup: false,
         };
         manager.load_exe_path()?;
         Ok(manager)
@@ -86,9 +88,17 @@ impl ExeManager {
 
         match read_to_string(&exes_file) {
             Ok(contents) => {
-                let path = contents.lines().next().map(|line| line.trim().to_string());
-                self.exe_path = path;
-                log::info!("Loaded executable from exe file");
+                let lines: Vec<&str> = contents.lines().collect();
+                if lines.len() >= 1 {
+                    let path = lines[0].trim();
+                    if !path.is_empty() {
+                        self.exe_path = Some(path.to_string());
+                    }
+                }
+                if lines.len() >= 2 {
+                    self.launch_on_startup = lines[1].trim().parse::<bool>().unwrap_or(false);
+                }
+                log::info!("Loaded executable and launch setting from exe file");
                 Ok(())
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -113,14 +123,15 @@ impl ExeManager {
         let mut exes_file = self.addon_dir.clone();
         exes_file.push("exes.txt");
 
-        let content = self.exe_path.clone().unwrap_or_default();
+        let exe_content = self.exe_path.clone().unwrap_or_default();
+        let content = format!("{}\n{}", exe_content, self.launch_on_startup);
         write(&exes_file, content).map_err(|e| {
             let error_msg = format!("Failed to save exe path to {exes_file:?}: {e}");
             log::error!("{error_msg}");
             NexusError::FileOperation(error_msg)
         })?;
 
-        log::debug!("Saved executable to exe file");
+        log::debug!("Saved executable and launch setting to exe file");
         Ok(())
     }
 
@@ -158,7 +169,10 @@ impl ExeManager {
         if self.exe_path.is_some() {
             self.stop_exe()?;
             let path = self.exe_path.take();
+
+            // remove from the text file also
             self.save_exe_path()?;
+
             if let Some(ref p) = path {
                 log::info!("Cleared executable: {p}");
             }
@@ -215,17 +229,24 @@ impl ExeManager {
     /**
      * Stops a running executable by path.
      *
+     * If no process is running, this is a no-op and returns success.
+     *
      * # Arguments
      * * `path` - Path to the executable file
      *
      * # Errors
-     * Returns `NexusError::ProcessStop` if the process is not running or killing fails.
+     * Returns `NexusError::ProcessStop` if killing the process fails.
      */
     pub fn stop_exe(&mut self) -> Result<()> {
         if let Some(mut child) = self.running_process.take() {
             match child.kill() {
                 Ok(_) => {
                     log::info!("Stopped executable");
+
+                    // Give the process a moment to fully terminate before returning
+                    // This helps prevent race conditions with cleanup threads
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
                     Ok(())
                 }
                 Err(e) => {
@@ -235,9 +256,8 @@ impl ExeManager {
                 }
             }
         } else {
-            Err(NexusError::ProcessStop(
-                "Process is not running".to_string(),
-            ))
+            log::info!("No process running to stop");
+            Ok(())
         }
     }
 
@@ -293,6 +313,20 @@ impl ExeManager {
      */
     pub fn is_process_running(&self) -> bool {
         self.running_process.is_some()
+    }
+
+    pub fn launch_on_startup(&mut self) -> &mut bool {
+        &mut self.launch_on_startup
+    }
+
+    /**
+     * Saves the current settings to the exes.txt file.
+     *
+     * # Errors
+     * Returns `NexusError::FileOperation` if writing to the file fails.
+     */
+    pub fn save_settings(&self) -> Result<()> {
+        self.save_exe_path()
     }
 }
 

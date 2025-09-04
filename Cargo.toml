@@ -12,7 +12,7 @@ path = "src/lib.rs"
 crate-type = ["cdylib"]
 
 [features]
-default = ["nexus"]
+default = []
 nexus = ["dep:nexus", "dep:rfd"]
 
 [dependencies]

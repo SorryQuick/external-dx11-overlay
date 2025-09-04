@@ -1,0 +1,21 @@
+name: Build
+
+on:
+  - workflow_dispatch
+  - workflow_call
+
+jobs:
+  build:
+    name: Build (Nexus)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - run: cargo build --release --features nexus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blishHUD overlay loader
+          path: |
+            target/release/blishud_overlay_loader.dll

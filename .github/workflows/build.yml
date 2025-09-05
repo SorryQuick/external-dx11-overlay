@@ -15,14 +15,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      # - uses: dtolnay/rust-toolchain@nightly
-      - uses: actions-rust-lang/setup-rust-toolchain@v1.14.1
+      - uses: dtolnay/rust-toolchain@nightly
+      # - uses: actions-rust-lang/setup-rust-toolchain@v1.14.1
         with:
           # on linux, it seems Nexus only recognizes the dll built with msvc
-          # targets: x86_64-pc-windows-msvc,x86_64-pc-windows-gnu
-          toolchain: nightly
-          target: x86_64-pc-windows-msvc
-      - run: rustup target add x86_64-pc-windows-gnu
+          targets: x86_64-pc-windows-msvc,x86_64-pc-windows-gnu
+          # toolchain: nightly
+          # target: x86_64-pc-windows-msvc
+      # - run: rustup target add x86_64-pc-windows-gnu
       - run: cargo build --release --features nexus
 
       - name: Rename DLL (PowerShell)

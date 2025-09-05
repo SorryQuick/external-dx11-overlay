@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 # needed for nexus addon info
 authors = ["SorryQuick", "Deathmore.3741"]
-description = "External DX11 Overlay"
+description = "External DX11 Overlay - BlishHUD running inside the game"
 repository = "https://github.com/SorryQuick/external-dx11-overlay"
 
 [lib]

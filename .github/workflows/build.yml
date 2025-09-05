@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+      tags:
+        - '*'
+
+jobs:
+  build:
+    name: Build (Nexus)
+    env:
+      RUSTFLAGS: -Awarnings
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.14.1
+        with:
+          # on linux, it seems Nexus only recognizes the dll built with msvc
+          toolchain: nightly
+          target: x86_64-pc-windows-msvc
+      - run: rustup target add x86_64-pc-windows-gnu
+      - run: cargo build --target x86_64-pc-windows-msvc --release --features nexus
+      - uses: actions/upload-artifact@v4
+        with:
+          name: (Nexus) BlishHUD overlay loader
+          path: target/x86_64-pc-windows-msvc/release/external_dx11_overlay.dll
+      - name: Upload files to a GitHub release
+        uses: svenstaro/upload-release-action@2.11.2
+        with:
+          file: target/x86_64-pc-windows-msvc/release/external_dx11_overlay.dll
+          release_name: (Nexus) BlishHUD overlay loader
+          asset_name: nexus_blishhud_overlay_loader.dll
+          tag: ${{ github.ref }}
+          overwrite: true
+          body: |
+            This is the Nexus-compatible version of the BlishHUD overlay loader.
+            It is compatible with the Nexus addon loader & manager.
+            Simply drop the DLL in your Gw2 addons directory and launch Guild Wars 2 with Nexus enabled.

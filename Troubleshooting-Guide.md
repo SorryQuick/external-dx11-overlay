@@ -38,7 +38,7 @@ Hopefully by following these steps you now know what part is failing.
 If you're using the Nexus integration instead of the traditional method, the troubleshooting process is slightly different. There are now four potential failure points:
 
 1. **Nexus framework itself (will rarely be the case)**
-2. **The nexus_blishhud_overlay_loader dll (Nexus version)**
+2. **The dll (Nexus version)**
 3. **The BlishHUD executable (same as previously)**
 4. **Nexus addon configuration**
 
@@ -53,7 +53,7 @@ If you're using the Nexus integration instead of the traditional method, the tro
 
 #### The addon is not showing up in the "installed" addons tab inside Nexus
 
-- **Wrong DLL version** : Make sure you're using the Nexus-compatible version of this addon. The DLL file is named "nexus_blishhud_overlay_loader.dll"
+- **Wrong DLL version** : Make sure you're using the Nexus-compatible version of this addon.
 
 #### Configuration Window Won't Open
 
@@ -128,7 +128,7 @@ From there, open an issue on github or ask for help on the blishhud discord, or 
 
 **Nexus Integration specific:**
 
-- Ensure you're using the correct DLL (**nexus_blishhud_overlay_loader.dll**) not the standard build (**external-dx11-overlay.dll**)
+- Ensure you're using the correct DLL and not the standard build.
 - Verify Nexus is properly installed and running before launching GW2
 - Check that the addon appears in Nexus's addon list (if it doesn't appear, the DLL might be in the wrong location, corrupted or you're using the wrong DLL)
 - If the configuration window doesn't open with ALT+SHIFT+1, check for keybind conflicts with GW2 or other addons, or change it in the Nexus settings. Anyway the menu icon should still work even if the keybind doesn't.

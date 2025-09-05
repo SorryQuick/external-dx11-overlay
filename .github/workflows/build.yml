@@ -7,6 +7,8 @@ on:
 jobs:
   build:
     name: Build (Nexus)
+    env:
+      RUSTFLAGS: -Awarnings
     # defaults:
     #   run:
     #     shell: pwsh

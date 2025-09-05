@@ -10,10 +10,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: dtolnay/rust-toolchain@master
         with:
           # on linux, it seems Nexus only recognizes the dll built with msvc
           targets: x86_64-pc-windows-msvc,x86_64-pc-windows-gnu
+          toolchain: nightly
       - run: cargo build --target=x86_64-pc-windows-msvc --release --features nexus
       - uses: actions/upload-artifact@v4
         with:

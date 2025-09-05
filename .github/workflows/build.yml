@@ -23,13 +23,13 @@ jobs:
       - run: rustup target add x86_64-pc-windows-gnu
       - run: cargo build --release --features nexus
 
-      # - name: Rename DLL (PowerShell)
-      #   shell: pwsh
-      #   run: |
-      #     $src = "target\\x86_64-pc-windows-msvc\\release\\external_dx11_overlay.dll"
-      #     $dst = "target\\x86_64-pc-windows-msvc\\release\\nexus_blishhud_overlay_loader.dll"
-      #     if (Test-Path $dst) { Remove-Item $dst -Force }
-      #     Copy-Item $src $dst -Force
+      - name: Rename DLL (PowerShell)
+        shell: pwsh
+        run: |
+          $src = "target\\x86_64-pc-windows-msvc\\release\\external_dx11_overlay.dll"
+          $dst = "target\\x86_64-pc-windows-msvc\\release\\nexus_blishhud_overlay_loader.dll"
+          if (Test-Path $dst) { Remove-Item $dst -Force }
+          Copy-Item $src $dst -Force
 
       - uses: actions/upload-artifact@v4
         with:

@@ -31,7 +31,7 @@ jobs:
         with:
           file: target/x86_64-pc-windows-msvc/release/external_dx11_overlay.dll
           release_name: (Nexus) BlishHUD overlay loader
-          asset_name: (Nexus) BlishHUD overlay loader
+          asset_name: nexus_blishhud_overlay_loader.dll
           tag: ${{ github.ref }}
           overwrite: true
           body: |

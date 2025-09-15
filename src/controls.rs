@@ -3,17 +3,29 @@ use std::{
     slice::from_raw_parts,
     sync::{
         OnceLock,
+        atomic::{AtomicBool, AtomicU8, Ordering},
         mpsc::{Sender, channel},
     },
+    time::{Duration, Instant},
 };
 
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
-        Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, SetFocus},
+        Input::{
+            GetRawInputData, HRAWINPUT,
+            KeyboardAndMouse::{
+                GetAsyncKeyState, GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_MENU,
+                VK_NUMLOCK,
+            },
+            RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER, RID_INPUT, RIDEV_INPUTSINK, RIM_TYPEKEYBOARD,
+            RegisterRawInputDevices,
+        },
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
-            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS,
+            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, GetMessageExtraInfo,
+            SetForegroundWindow, SetWindowLongPtrW, WM_ACTIVATE, WM_ACTIVATEAPP, WM_INPUT,
+            WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS, WM_SYSKEYDOWN,
+            WM_SYSKEYUP,
         },
     },
 };
@@ -62,6 +74,13 @@ unsafe impl Sync for StaticSender {}
 unsafe impl Send for StaticSender {}
 static MOUSE_SENDER: OnceLock<StaticSender> = OnceLock::new();
 
+//Keep track of the numlock state and ALT_UP
+//This is basically just a workaround for focus issues where windows
+//sends "fake" numlock states all the time.
+//Alt is needed because of some weird windows shenanigans
+static NUMLOCK_STATE: AtomicU8 = AtomicU8::new(99);
+static mut LAST_ALT_UP: Option<Instant> = None;
+
 unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
     msg: u32,
@@ -98,12 +117,32 @@ unsafe extern "system" fn wnd_proc(
                     return LRESULT(0);
                 }*/
             }
-            WM_KEYDOWN => {
-                if let Some(map) = KEYBINDS.get() {
-                    let combo = get_current_keybind(wparam.0 as u32);
-                    if let Some(action) = map.get(&combo) {
-                        action();
+            WM_SYSKEYUP | WM_SYSKEYDOWN => {
+                if wparam.0 == 0x90 {
+                    return LRESULT(0);
+                }
+            }
+            WM_KEYDOWN | WM_KEYUP => {
+                if wparam.0 as u16 == VK_MENU.0 {
+                    unsafe {
+                        log::info!("Alt up!");
+                        LAST_ALT_UP = Some(Instant::now());
+                    }
+                }
+                //Numlock fix
+                if wparam.0 == 0x90 {
+                    if !synchronize_numlock() {
                         return LRESULT(0);
+                    }
+                }
+
+                if msg == WM_KEYDOWN {
+                    if let Some(map) = KEYBINDS.get() {
+                        let combo = get_current_keybind(wparam.0 as u32);
+                        if let Some(action) = map.get(&combo) {
+                            action();
+                            return LRESULT(0);
+                        }
                     }
                 }
             }
@@ -128,6 +167,26 @@ unsafe extern "system" fn wnd_proc(
     }
 }
 
+//Returns true if the numlock press should count, false if we should swallow it
+fn synchronize_numlock() -> bool {
+    //Swallow numlock if alt was pressed soon before
+    if let Some(instant) = unsafe { LAST_ALT_UP } {
+        log::info!(
+            "Synchronizing. Last alt: {}ms ago",
+            instant.elapsed().as_millis()
+        );
+        if instant.elapsed() < Duration::from_millis(100) {
+            return false;
+        }
+    }
+    let numlock_state = unsafe { GetKeyState(VK_NUMLOCK.0 as i32) & 1 } as u8;
+    if numlock_state != NUMLOCK_STATE.load(Ordering::Relaxed) {
+        NUMLOCK_STATE.store(numlock_state, Ordering::Relaxed);
+        return true;
+    }
+    return false;
+}
+
 fn grab_focus(hwnd: HWND) {
     unsafe {
         SetForegroundWindow(hwnd).ok().ok();
@@ -142,6 +201,7 @@ fn release_focus() {
 }
 
 pub fn start_mouse_input_thread() {
+    synchronize_numlock();
     let (tx, rx) = channel::<MouseInputPacket>();
 
     MOUSE_SENDER

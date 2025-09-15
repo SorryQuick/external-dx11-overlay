@@ -125,7 +125,6 @@ unsafe extern "system" fn wnd_proc(
             WM_KEYDOWN | WM_KEYUP => {
                 if wparam.0 as u16 == VK_MENU.0 {
                     unsafe {
-                        log::info!("Alt up!");
                         LAST_ALT_UP = Some(Instant::now());
                     }
                 }
@@ -171,10 +170,6 @@ unsafe extern "system" fn wnd_proc(
 fn synchronize_numlock() -> bool {
     //Swallow numlock if alt was pressed soon before
     if let Some(instant) = unsafe { LAST_ALT_UP } {
-        log::info!(
-            "Synchronizing. Last alt: {}ms ago",
-            instant.elapsed().as_millis()
-        );
         if instant.elapsed() < Duration::from_millis(100) {
             return false;
         }

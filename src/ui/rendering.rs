@@ -218,7 +218,7 @@ fn update_textures(state: &mut OverlayState, texture_ptrs: [u64; 2]) -> Result<(
                 HANDLE(texture_ptrs[i] as isize),
                 &mut state.overlay_textures[i] as *mut _,
             ) {
-                log::error!("{}", e.to_string());
+                log::error!("Failed to open shared resource: {}", e.to_string());
                 return Err(());
             }
         };
@@ -228,7 +228,12 @@ fn update_textures(state: &mut OverlayState, texture_ptrs: [u64; 2]) -> Result<(
         let desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
             ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2D,
-            ..Default::default()
+            Anonymous: windows::Win32::Graphics::Direct3D11::D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                Texture2D: windows::Win32::Graphics::Direct3D11::D3D11_TEX2D_SRV {
+                    MostDetailedMip: 0,
+                    MipLevels: 1,
+                },
+            },
         };
 
         unsafe {
@@ -236,7 +241,7 @@ fn update_textures(state: &mut OverlayState, texture_ptrs: [u64; 2]) -> Result<(
                 .device
                 .CreateShaderResourceView(tex, Some(&desc), Some(&mut srv))
             {
-                log::error!("{}", e.to_string());
+                log::error!("Failed to create shader resource view: {}", e.to_string());
                 return Err(());
             }
         }

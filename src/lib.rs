@@ -15,10 +15,17 @@ use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
 use windows::Win32::{
     Foundation::HINSTANCE,
     System::{
-        LibraryLoader::FreeLibraryAndExitThread,
-        SystemServices::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH},
+        LibraryLoader::FreeLibraryAndExitThread
     },
 };
+#[cfg(not(feature = "nexus"))]
+use windows::Win32::System::SystemServices::{DLL_PROCESS_DETACH, DLL_PROCESS_ATTACH};
+
+#[cfg(feature = "nexus")]
+use nexus::{self, AddonFlags};
+
+#[cfg(feature = "nexus")]
+pub mod nexus_addon;
 
 pub mod address_finder;
 pub mod controls;
@@ -39,6 +46,7 @@ static mut HANDLE_NO: u64 = 0;
  * TODO: detatch() is poorly tested. It also definitely lacks some unloading stuff, like wnd_proc
  *
  * */
+#[cfg(not(feature = "nexus"))]
 #[unsafe(no_mangle)]
 #[allow(unused_variables)]
 extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) -> bool {
@@ -57,10 +65,11 @@ fn attach(handle: HINSTANCE) {
         log::info!("Attaching to process");
         enable_logging();
 
-        //Do this early
+        //Do this early - only needed for external overlay functionality
         start_mmf_thread();
 
         let (base, size) = get_base_addr_and_size();
+
         let mainwindow_hwnd = get_mainwindow_hwnd().expect("Could not get the game's window.");
 
         if base == 0 || size == 0 {
@@ -77,32 +86,33 @@ fn attach(handle: HINSTANCE) {
             module_size: size,
         };
 
-        let present_addr = address_finder.find_addr_present();
+            let present_addr = address_finder.find_addr_present();
 
-        if present_addr == 0 {
-            log::error!("Could not find the address of DirectX11 Present.");
-            unsafe { FreeLibraryAndExitThread(HINSTANCE { 0: handle.0 }, 0) };
-        }
+            if present_addr == 0 {
+                log::error!("Could not find the address of DirectX11 Present.");
+                unsafe { FreeLibraryAndExitThread(HINSTANCE { 0: handle.0 }, 0) };
+            }
 
-        unsafe {
-            present_hook
-                .initialize(
-                    mem::transmute(present_addr as *const ()),
-                    ui::get_detoured_present(),
-                )
-                .unwrap()
-                .enable()
-                .unwrap();
-        }
+            unsafe {
+                present_hook
+                    .initialize(
+                        mem::transmute(present_addr as *const ()),
+                        ui::get_detoured_present(),
+                    )
+                    .unwrap()
+                    .enable()
+                    .unwrap();
+            }
 
         unsafe { HANDLE_NO = handle.0 as u64 };
 
-        start_statistics_server();
-        init_keybinds();
+            start_statistics_server();
+            init_keybinds();
 
-        //MUST BE CALLED IN THIS ORDER
-        start_mouse_input_thread();
-        initialize_controls(mainwindow_hwnd);
+            //MUST BE CALLED IN THIS ORDER
+            start_mouse_input_thread();
+            initialize_controls(mainwindow_hwnd);
+
     });
 }
 
@@ -114,10 +124,12 @@ fn detatch() {
 }
 fn enable_logging() {
     let file = {
+
         let logs_dir = PathBuf::from("addons/LOADER_public/logs");
+
         create_dir_all(&logs_dir).expect("Failed to create logs directory");
 
-        let filename = format!("dll-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
+        let filename = format!("overlay-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
         let filepath = logs_dir.join(filename);
 
         OpenOptions::new()
@@ -181,4 +193,17 @@ fn enable_logging() {
     log::info!(
         "---------------------------------------- New Session ----------------------------------------------"
     );
+}
+
+// ======= Nexus export - only compiled when building for nexus =============
+#[cfg(feature = "nexus")]
+nexus::export! {
+    name: "Blish HUD overlay loader",
+    signature: -0x7A8B9C2D,
+    load: nexus_addon::nexus_load,
+    unload: nexus_addon::nexus_unload,
+    flags: AddonFlags::None,
+    provider: nexus::UpdateProvider::GitHub,
+    update_link: "https://github.com/SorryQuick/external-dx11-overlay",
+    log_filter: "trace"
 }

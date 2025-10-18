@@ -39,6 +39,7 @@ static mut HANDLE_NO: u64 = 0;
  * TODO: detatch() is poorly tested. It also definitely lacks some unloading stuff, like wnd_proc
  *
  * */
+#[cfg(not(feature = "for_nexus"))]
 #[unsafe(no_mangle)]
 #[allow(unused_variables)]
 extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) -> bool {
@@ -52,7 +53,7 @@ extern "system" fn DllMain(dll_module: HINSTANCE, call_reason: u32, _: *mut ()) 
 }
 ///THE MAIN FUNCTION. It initializes everything needed.
 ///Ideally, all hooks are created here.
-fn attach(handle: HINSTANCE) {
+pub fn attach(handle: HINSTANCE) {
     std::thread::spawn(move || {
         log::info!("Attaching to process");
         enable_logging();
@@ -106,13 +107,13 @@ fn attach(handle: HINSTANCE) {
     });
 }
 
-fn detatch() {
+pub fn detatch() {
     log::info!("Detatching from process");
     unsafe {
         present_hook.disable().unwrap();
     }
 }
-fn enable_logging() {
+pub fn enable_logging() {
     let file = {
         let logs_dir = PathBuf::from("addons/LOADER_public/logs");
         create_dir_all(&logs_dir).expect("Failed to create logs directory");

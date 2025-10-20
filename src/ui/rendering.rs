@@ -228,7 +228,12 @@ fn update_textures(state: &mut OverlayState, texture_ptrs: [u64; 2]) -> Result<(
         let desc = D3D11_SHADER_RESOURCE_VIEW_DESC {
             Format: DXGI_FORMAT_R8G8B8A8_UNORM,
             ViewDimension: D3D11_SRV_DIMENSION_TEXTURE2D,
-            ..Default::default()
+            Anonymous: windows::Win32::Graphics::Direct3D11::D3D11_SHADER_RESOURCE_VIEW_DESC_0 {
+                Texture2D: windows::Win32::Graphics::Direct3D11::D3D11_TEX2D_SRV {
+                    MostDetailedMip: 0,
+                    MipLevels: 1,
+                },
+            },
         };
 
         unsafe {

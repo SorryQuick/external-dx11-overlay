@@ -1,6 +1,6 @@
 use address_finder::AddressFinder;
 use chrono::{Local, NaiveDateTime};
-use controls::{initialize_controls, start_mouse_input_thread};
+use controls::{initialize_controls, restore_wnd_proc, start_mouse_input_thread};
 use debug::{debug_overlay::add_to_debug_log_overlay, statistics::start_statistics_server};
 use fern::Dispatch;
 use hooks::present_hook;
@@ -112,6 +112,12 @@ pub fn detatch() {
     log::info!("Detatching from process");
     unsafe {
         present_hook.disable().unwrap();
+
+        if let Some(hwnd) = get_mainwindow_hwnd() {
+            restore_wnd_proc(hwnd);
+        } else {
+            log::error!("Could not get the window's HWND to restore wnd_proc.");
+        }
     }
 }
 pub fn enable_logging() {

@@ -34,6 +34,16 @@ pub fn initialize_controls(hwnd: HWND) {
         ORIGINAL_WNDPROC = Some(std::mem::transmute(old_wndproc));
     }
 }
+pub fn restore_wnd_proc(hwnd: HWND) {
+    unsafe {
+        if let Some(Some(orig)) = ORIGINAL_WNDPROC {
+            SetWindowLongPtrW(hwnd, GWLP_WNDPROC, orig as _);
+            ORIGINAL_WNDPROC = None;
+        } else {
+            log::error!("Could not get the value for ORIGINAL_WNDPROC to restore it.");
+        }
+    }
+}
 
 fn get_x_lparam(lparam: LPARAM) -> i32 {
     let lparam_u32 = lparam.0 as u32;

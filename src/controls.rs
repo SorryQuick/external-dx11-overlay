@@ -3,7 +3,7 @@ use std::{
     slice::from_raw_parts,
     sync::{
         OnceLock,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicU8, Ordering},
         mpsc::{Sender, channel},
     },
     time::{Duration, Instant},
@@ -12,20 +12,13 @@ use std::{
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, WPARAM},
     UI::{
-        Input::{
-            GetRawInputData, HRAWINPUT,
-            KeyboardAndMouse::{
-                GetAsyncKeyState, GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_MENU,
-                VK_NUMLOCK,
-            },
-            RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER, RID_INPUT, RIDEV_INPUTSINK, RIM_TYPEKEYBOARD,
-            RegisterRawInputDevices,
+        Input::KeyboardAndMouse::{
+            GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_MENU, VK_NUMLOCK,
         },
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, GetMessageExtraInfo,
-            SetForegroundWindow, SetWindowLongPtrW, WM_ACTIVATE, WM_ACTIVATEAPP, WM_INPUT,
-            WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS, WM_SYSKEYDOWN,
-            WM_SYSKEYUP,
+            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
+            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_MOUSEMOVE,
+            WM_SETFOCUS, WM_SYSKEYDOWN, WM_SYSKEYUP,
         },
     },
 };

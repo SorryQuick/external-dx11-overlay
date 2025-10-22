@@ -1,14 +1,15 @@
 use address_finder::AddressFinder;
-use chrono::Local;
+use chrono::{Local, NaiveDateTime};
 use controls::{initialize_controls, start_mouse_input_thread};
 use debug::{debug_overlay::add_to_debug_log_overlay, statistics::start_statistics_server};
 use fern::Dispatch;
 use hooks::present_hook;
 use keybinds::init_keybinds;
 use std::{
-    fs::{OpenOptions, create_dir_all},
+    fs::{OpenOptions, create_dir_all, read_dir, remove_file},
     mem,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    time::SystemTime,
 };
 use ui::mmf::start_mmf_thread;
 use utils::{get_base_addr_and_size, get_mainwindow_hwnd};
@@ -116,6 +117,7 @@ pub fn detatch() {
 pub fn enable_logging() {
     let file = {
         let logs_dir = PathBuf::from("addons/LOADER_public/logs");
+        cleanup_old_logs(&logs_dir);
         create_dir_all(&logs_dir).expect("Failed to create logs directory");
 
         let filename = format!("dll-{}.log", Local::now().format("%Y-%m-%d_%H-%M-%S"));
@@ -182,4 +184,31 @@ pub fn enable_logging() {
     log::info!(
         "---------------------------------------- New Session ----------------------------------------------"
     );
+}
+
+///Cleans up logs older than 24h
+pub fn cleanup_old_logs(dir: &Path) {
+    let cutoff = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+        - 24 * 3600; //-24h
+
+    if let Ok(readdir) = read_dir(dir) {
+        for entry in readdir.flatten() {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+
+            if let Some((_pfx, date_str)) = name.split_once('-') {
+                if date_str.ends_with(".log") {
+                    let date_str = &date_str[..date_str.len() - 4];
+                    if let Ok(dt) = NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d_%H-%M-%S") {
+                        if dt.and_utc().timestamp() < cutoff {
+                            remove_file(entry.path()).ok();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

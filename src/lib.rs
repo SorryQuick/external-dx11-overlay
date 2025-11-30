@@ -116,7 +116,7 @@ pub fn detatch() {
         if let Some(hwnd) = get_mainwindow_hwnd() {
             restore_wnd_proc(hwnd);
         } else {
-            log::error!("Could not get the window's HWND to restore wnd_proc.");
+            //The window has been closed, we don't care about restoring wnd proc in that case.
         }
     }
 }

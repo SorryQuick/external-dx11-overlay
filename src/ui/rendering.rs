@@ -1,5 +1,8 @@
 use std::{
-    sync::{Mutex, atomic::Ordering},
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Instant,
 };
 
@@ -29,7 +32,7 @@ use crate::{
         statistics::{self, send_statistic},
     },
     hooks::present_hook,
-    ui::{MMF_DATA, mmf::cleanup_shutdown},
+    ui::{MMF_DATA, UPDATE_SCHEDULED, mmf::cleanup_shutdown},
 };
 
 use super::OVERLAY_STATE;
@@ -138,17 +141,13 @@ pub fn detoured_present(swapchain: IDXGISwapChain, sync_interval: u32, flags: u3
         let texture_idx = mmfdata.index as usize;
 
         //Bad data, don't render that frame.
-        if !mmfdata.is_blish_alive
-            || mmfdata.width == 0
-            || mmfdata.height == 0
-            || mmfdata.addr1 == 0
-            || mmfdata.addr2 == 0
-        {
+        if !mmfdata.is_blish_alive || mmfdata.addr1 == 0 || mmfdata.addr2 == 0 {
             return_present!();
         }
 
         //Resize occured
-        if state.height != mmfdata.height || state.width != mmfdata.width {
+        if UPDATE_SCHEDULED.load(Ordering::Relaxed) {
+            UPDATE_SCHEDULED.store(false, Ordering::Relaxed);
             state.resize(&swapchain);
             if update_textures(&mut state, [mmfdata.addr1, mmfdata.addr2]).is_err() {
                 state.context.PSSetShaderResources(0, Some(&[None]));

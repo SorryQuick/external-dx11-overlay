@@ -10,7 +10,7 @@ use std::{
 
 use super::{
     DEBUG_FEATURES,
-    debug_overlay::{OVERLAY_MODE, overlay_mode, refresh_overlay_buffer},
+    debug_overlay::{OVERLAY_MODE, overlay_mode},
 };
 
 //Sender
@@ -57,7 +57,7 @@ pub fn start_statistics_server() {
                 && DEBUG_FEATURES.debug_overlay_enabled.load(Ordering::Relaxed)
                 && OVERLAY_MODE.load(Ordering::Relaxed) == overlay_mode::STAT_MODE
             {
-                refresh_overlay_buffer(Some(&stats));
+                //refresh_overlay_buffer(Some(&stats));
                 last_refresh = Instant::now();
             }
         }

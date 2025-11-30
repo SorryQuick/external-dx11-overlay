@@ -9,7 +9,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CONTROL, VK_ME
 
 use crate::debug::{
     DEBUG_FEATURES,
-    debug_overlay::{OVERLAY_MODE, overlay_mode, refresh_overlay_buffer},
+    debug_overlay::{OVERLAY_MODE, overlay_mode},
     dump_debug_data, restart_blish,
 };
 
@@ -156,16 +156,16 @@ fn toggle_debug_overlay() {
         }*/
         //TODO
     } else {
-        refresh_overlay_buffer(None);
+        //refresh_overlay_buffer(None);
     }
     log::info!("Debug overlay toggled.");
 }
 
 fn change_overlay_mode_to_log() {
     OVERLAY_MODE.store(overlay_mode::LOG_MODE, Ordering::Relaxed);
-    refresh_overlay_buffer(None);
+    //refresh_overlay_buffer(None);
 }
 fn change_overlay_mode_to_statistics() {
     OVERLAY_MODE.store(overlay_mode::STAT_MODE, Ordering::Relaxed);
-    refresh_overlay_buffer(None);
+    //refresh_overlay_buffer(None);
 }

@@ -2,37 +2,37 @@ use std::{
     ffi::OsStr,
     os::windows::ffi::OsStrExt,
     ptr::null_mut,
-    slice::from_raw_parts,
-    sync::{Arc, RwLock},
+    slice::{from_raw_parts, from_raw_parts_mut},
+    sync::{atomic::Ordering, Arc, RwLock},
     time::Duration,
 };
 
 use windows::{
-    Win32::{
-        Foundation::{BOOL, CloseHandle, HANDLE},
+    core::{w, PCWSTR}, Win32::{
+        Foundation::{CloseHandle, BOOL, HANDLE, RECT},
         System::{
             Memory::{
-                FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS, MapViewOfFile, OpenFileMappingW,
-                UnmapViewOfFile,
+                MapViewOfFile, OpenFileMappingW, UnmapViewOfFile, FILE_MAP_ALL_ACCESS, MEMORY_MAPPED_VIEW_ADDRESS
             },
-            Threading::{self, OpenMutexW},
-        },
-    },
-    core::PCWSTR,
+            Threading::{self, CreateEventW, OpenMutexW, SetEvent, WaitForSingleObject, INFINITE},
+        }, UI::WindowsAndMessaging::GetClientRect,
+    }
 };
 
-use super::{HEADER_NAME, HEADER_SIZE, MMF_DATA, OVERLAY_STATE};
+use crate::utils::get_mainwindow_hwnd;
+
+use super::{HEADER_NAME, HEADER_SIZE, MMF_DATA, OVERLAY_STATE, UPDATE_SCHEDULED};
+
 
 #[derive(Debug)]
 pub struct MMFData {
     header: Option<MEMORY_MAPPED_VIEW_ADDRESS>,
     file_mapping: Option<HANDLE>,
-    pub width: u32,
-    pub height: u32,
     pub index: u32,
     pub addr1: u64,
     pub addr2: u64,
     pub is_blish_alive: bool,
+    resize_event: HANDLE,
 }
 unsafe impl Send for MMFData {}
 unsafe impl Sync for MMFData {}
@@ -50,22 +50,31 @@ pub fn start_mmf_thread() {
                 .set(Arc::new(RwLock::new(MMFData {
                     header: None,
                     file_mapping: None,
-                    width: 0,
-                    height: 0,
                     index: 0,
                     addr1: 0,
                     addr2: 0,
                     is_blish_alive: false,
+                    resize_event: unsafe{CreateEventW(None, true, false, w!("Global\\BlishHUD_ResizeEvent")).expect("Could not create resize event")}
                 })))
                 .ok();
         }
+        let event_name = w!("Global\\BlishHUD_WakeEvent");
+        let mut wake_event = unsafe {CreateEventW(None, false, false, event_name)};
 
         loop {
+            if let Ok(event) = wake_event {
+                unsafe {WaitForSingleObject(event, INFINITE)};
+            } else {
+                wake_event = unsafe {CreateEventW(None, false, false, event_name)};
+                std::thread::sleep(Duration::from_millis(100));
+                continue;
+            }
             //Get data locally so we can drop the lock
             let mut mmfdata = MMF_DATA.get().unwrap().write().unwrap();
             let mut blish_alive = mmfdata.is_blish_alive;
             let mut header = mmfdata.header;
             let mut mapping = mmfdata.file_mapping;
+            let mut send_dimensions = false;
             drop(mmfdata);
 
             //Handle blish opening/closing
@@ -83,37 +92,72 @@ pub fn start_mmf_thread() {
                 if let Ok((_header, _mapping)) = open_header_mmf() {
                     header = Some(_header);
                     mapping = Some(_mapping);
+                    send_dimensions = true;
                 }
             }
 
             if let Some(ptr) = header {
+                let mut update_textures = false;
                 //Read into local variables, we don't want to lock mmfdata yet
                 //since MMF reads are "slow" compared to assigning to a struct.
                 let ptr = ptr.Value as *mut u8;
                 let data = unsafe { from_raw_parts(ptr, HEADER_SIZE) };
-                let width = u32::from_le_bytes(data[0..4].try_into().unwrap());
-                let height = u32::from_le_bytes(data[4..8].try_into().unwrap());
                 let index = u32::from_le_bytes(data[8..12].try_into().unwrap());
                 let addr1 = u64::from_le_bytes(data[12..20].try_into().unwrap());
                 let addr2 = u64::from_le_bytes(data[20..28].try_into().unwrap());
 
+                
+
                 //Lock real quick while copying the data (should be very fast)
                 mmfdata = MMF_DATA.get().unwrap().write().unwrap();
+
+                //Textures changed on the other side
+                if addr1 != mmfdata.addr1 || addr1 != mmfdata.addr1 {
+                    update_textures = true;
+                }
+
                 mmfdata.header = header;
                 mmfdata.file_mapping = mapping;
                 mmfdata.is_blish_alive = blish_alive;
-                mmfdata.width = width;
-                mmfdata.height = height;
                 mmfdata.index = index;
                 mmfdata.addr1 = addr1;
                 mmfdata.addr2 = addr2;
                 drop(mmfdata);
+
+                if update_textures {
+                    UPDATE_SCHEDULED.store(true, Ordering::Relaxed);
+                }
+
+                if send_dimensions {
+                    //Get the initial dimensions to send to MMF
+                    let mut rect = RECT::default();
+                    unsafe {
+                        GetClientRect(get_mainwindow_hwnd().expect("Could not get main window handle (initial dimensions)"), &mut rect);
+                        let width  = rect.right - rect.left;
+                        let height = rect.bottom - rect.top;
+                        set_mmf_dimensions(width as u32, height as u32);
+                    }
+                }
             }
 
-            std::thread::sleep(Duration::from_millis(20));
         }
     });
 }
+
+
+///Sets the new dimensions in MMF and notifies the source via windows events.
+pub fn set_mmf_dimensions(w: u32, h: u32) {
+    let mmfdata = MMF_DATA.get().unwrap().write().unwrap();
+    if let Some(header) = mmfdata.header {
+        let data: &mut [u8] = unsafe { from_raw_parts_mut(header.Value as *mut u8, HEADER_SIZE) };
+        data[0..4].copy_from_slice(&w.to_le_bytes());
+        data[4..8].copy_from_slice(&h.to_le_bytes());
+
+        //Set resize event
+        unsafe {SetEvent(mmfdata.resize_event).expect("Could not Set the resize event");}
+    }
+}
+
 
 //Simply pings the mutex in the blish fork, to check if it's still up and hasn't crashed.
 pub fn is_blish_alive() -> bool {
@@ -162,9 +206,9 @@ pub fn cleanup_shutdown() {
                 CloseHandle(hmap).ok();
             }
         }
-        mmfdata.height = 0;
+        //mmfdata.height = 0;
+        //mmfdata.width = 0;
         mmfdata.is_blish_alive = false;
-        mmfdata.width = 0;
         mmfdata.index = 0;
         mmfdata.addr1 = 0;
         mmfdata.addr2 = 0;

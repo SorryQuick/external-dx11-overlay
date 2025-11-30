@@ -1,7 +1,7 @@
 use address_finder::AddressFinder;
 use chrono::{Local, NaiveDateTime};
 use controls::{initialize_controls, restore_wnd_proc, start_mouse_input_thread};
-use debug::{debug_overlay::add_to_debug_log_overlay, statistics::start_statistics_server};
+use debug::statistics::start_statistics_server;
 use fern::Dispatch;
 use hooks::present_hook;
 use keybinds::init_keybinds;
@@ -160,7 +160,7 @@ pub fn enable_logging() {
                     message
                 )
             };
-            add_to_debug_log_overlay(format.to_string());
+            //add_to_debug_log_overlay(format.to_string());
             out.finish(format);
         })
         .apply()

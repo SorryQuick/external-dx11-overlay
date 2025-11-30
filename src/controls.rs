@@ -10,28 +10,26 @@ use std::{
 };
 
 use windows::Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, WPARAM},
+    Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
     UI::{
         Input::KeyboardAndMouse::{
             GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_MENU, VK_NUMLOCK,
         },
         WindowsAndMessaging::{
-            CallWindowProcW, DefWindowProcW, GWLP_WNDPROC, SetForegroundWindow, SetWindowLongPtrW,
-            WM_ACTIVATE, WM_ACTIVATEAPP, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_MOUSEMOVE,
-            WM_SETFOCUS, WM_SYSKEYDOWN, WM_SYSKEYUP,
+            CallWindowProcW, DefWindowProcW, GetClientRect, SetForegroundWindow, SetWindowLongPtrW, GWLP_WNDPROC, WM_ACTIVATE, WM_ACTIVATEAPP, WM_DPICHANGED, WM_KEYDOWN, WM_KEYUP, WM_KILLFOCUS, WM_MOUSEMOVE, WM_SETFOCUS, WM_SIZE, WM_SYSKEYDOWN, WM_SYSKEYUP
         },
     },
 };
 
 use crate::{
     globals::{self, ORIGINAL_WNDPROC},
-    keybinds::{KEYBINDS, get_current_keybind},
+    keybinds::{get_current_keybind, KEYBINDS}, ui::{mmf::set_mmf_dimensions, UPDATE_SCHEDULED},
 };
 
 pub fn initialize_controls(hwnd: HWND) {
     unsafe {
         let old_wndproc = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wnd_proc as _);
-        ORIGINAL_WNDPROC = Some(std::mem::transmute(old_wndproc));
+        ORIGINAL_WNDPROC = Some(std::mem::transmute(old_wndproc)); 
     }
 }
 pub fn restore_wnd_proc(hwnd: HWND) {
@@ -155,6 +153,22 @@ unsafe extern "system" fn wnd_proc(
                     grab_focus(hwnd);
                 } else {
                     release_focus();
+                }
+            }
+            WM_SIZE => {
+                let lp = lparam.0 as u32;
+                let width  = (lp & 0xFFFF) as u32;
+                let height = (lp >> 16) as u32;
+                set_mmf_dimensions(width, height); 
+            }
+            WM_DPICHANGED => {
+                unsafe {
+                    let rect = *(lparam.0 as *const RECT);
+
+                    let width  = rect.right - rect.left;
+                    let height = rect.bottom - rect.top;
+
+                    set_mmf_dimensions(width as u32, height as u32);
                 }
             }
             _ => {}

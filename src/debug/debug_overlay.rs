@@ -29,7 +29,7 @@ pub mod overlay_mode {
 //Font. Because I don't want users to have to install corefonts to their wine prefix.
 //Steam automatically links to fonts, but manually created prefixes do NOT.
 //So we link it statically for compatiblity purposes.
-static FONT_DATA: &[u8] = include_bytes!("../ui/segoeui.ttf");
+//static FONT_DATA: &[u8] = include_bytes!("../ui/segoeui.ttf");
 static FONT: OnceLock<Font> = OnceLock::new();
 const FONT_SIZE: f32 = 12.0;
 
@@ -82,7 +82,7 @@ fn get_log_lock() -> MutexGuard<'static, VecDeque<String>> {
         .expect("Could not get log mutex")
 }
 
-pub fn add_to_debug_log_overlay(str: String) {
+/*pub fn add_to_debug_log_overlay(str: String) {
     let mut log = get_log_lock();
 
     if log.len() == MAX_LOG_LINES {
@@ -93,9 +93,9 @@ pub fn add_to_debug_log_overlay(str: String) {
         drop(log);
         refresh_overlay_buffer(None);
     }
-}
+}*/
 
-pub fn refresh_overlay_buffer(stats: Option<&HashMap<u32, u32>>) {
+/*pub fn refresh_overlay_buffer(stats: Option<&HashMap<u32, u32>>) {
     let overlay = get_overlay();
     let overlay_ptr = overlay.as_ptr() as *mut u8;
     let log = get_log_lock();
@@ -155,9 +155,9 @@ pub fn refresh_overlay_buffer(stats: Option<&HashMap<u32, u32>>) {
             _ => {}
         }
     }
-}
+}*/
 
-fn draw_text_at(buf: *mut u8, str: String, x: f32, y: f32) -> f32 {
+/*fn draw_text_at(buf: *mut u8, str: String, x: f32, y: f32) -> f32 {
     let mut x = x;
     for c in str.chars() {
         if x + FONT_SIZE >= MAX_X {
@@ -169,7 +169,7 @@ fn draw_text_at(buf: *mut u8, str: String, x: f32, y: f32) -> f32 {
         }
     }
     x
-}
+}*/
 
 fn clear_log_area(buf: *mut u8) {
     for j in 0..OVERLAY_HEIGHT {
@@ -191,7 +191,7 @@ fn clear_log_area(buf: *mut u8) {
 }
 
 //Draws a character. Very inefficient, but since it's only for debugging anyway we don't care
-unsafe fn draw_char(buf: *mut u8, x: f32, y: f32, ch: char) -> f32 {
+/*unsafe fn draw_char(buf: *mut u8, x: f32, y: f32, ch: char) -> f32 {
     let font = FONT.get_or_init(|| {
         let font = Font::from_bytes(FONT_DATA, FontSettings::default()).unwrap();
         font
@@ -222,10 +222,10 @@ unsafe fn draw_char(buf: *mut u8, x: f32, y: f32, ch: char) -> f32 {
         }
     }
     x as f32 + metrics.advance_width
-}
+}*/
 
 //Draws the debug overlay in the buffer into the pixels array (which will be copied to GPU)
-pub fn draw_debug_overlay(pixels: &mut [u8], width: u32) {
+/*pub fn draw_debug_overlay(pixels: &mut [u8], width: u32) {
     let overlay = get_overlay();
 
     let frame_row_bytes = (width * 4) as usize;
@@ -241,10 +241,10 @@ pub fn draw_debug_overlay(pixels: &mut [u8], width: u32) {
             std::ptr::copy_nonoverlapping(src_row_ptr, dst_row_ptr, OVERLAY_WIDTH * 4);
         }
     }
-}
+}*/
 
 //When overlay is toggled off, these pixels have to be cleared.
-pub fn clear_debug_overlay(pixels: &mut [u8], width: u32) {
+/*pub fn clear_debug_overlay(pixels: &mut [u8], width: u32) {
     let frame_row_bytes = (width * 4) as usize;
 
     unsafe {
@@ -257,4 +257,4 @@ pub fn clear_debug_overlay(pixels: &mut [u8], width: u32) {
             }
         }
     }
-}
+}*/
